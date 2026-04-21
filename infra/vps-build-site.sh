@@ -46,8 +46,10 @@ fail() { printf "%s✗%s %s\n" "$c_red"   "$c_reset" "$*" >&2; exit 1; }
 if [[ -d $CHECKOUT_DIR/.git ]]; then
   say "Updating existing checkout at $CHECKOUT_DIR…"
   git -C "$CHECKOUT_DIR" fetch --depth=1 origin "$BRANCH"
-  git -C "$CHECKOUT_DIR" checkout "$BRANCH"
-  git -C "$CHECKOUT_DIR" reset --hard "origin/$BRANCH"
+  # -B creates the local branch if missing OR resets it to the remote tip.
+  # Handles the case where the previous checkout was on a different branch
+  # (e.g. landing-site before we merged it into main).
+  git -C "$CHECKOUT_DIR" checkout -B "$BRANCH" FETCH_HEAD
 else
   say "Cloning $REPO_URL ($BRANCH) to $CHECKOUT_DIR…"
   git clone --depth=1 --branch "$BRANCH" "$REPO_URL" "$CHECKOUT_DIR"
