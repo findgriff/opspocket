@@ -24,7 +24,14 @@ set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────
 DOMAIN="${DOMAIN:?Set DOMAIN — the fully-qualified hostname this box will serve}"
-OPENAI_API_KEY="${OPENAI_API_KEY:?Set OPENAI_API_KEY}"
+# MODEL_PROVIDER: openai | ollama
+#   openai → requires OPENAI_API_KEY, uses api.openai.com
+#   ollama → self-hosted Llama 3.2 on this box. No API key. Slower than
+#            cloud inference but zero cost + works offline. Recommended
+#            for free-tier / demo deploys.
+MODEL_PROVIDER="${MODEL_PROVIDER:-openai}"
+OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2:3b}"   # ~2 GB, fits on CPX22 (4 GB)
 GATEWAY_TOKEN="${GATEWAY_TOKEN:-$(openssl rand -hex 16)}"
 CLAWMINE_PASSWORD="${CLAWMINE_PASSWORD:-$(openssl rand -base64 18 | tr -d '=+/' | cut -c1-24)}"
 CODE_PASSWORD="${CODE_PASSWORD:-${CLAWMINE_PASSWORD}}"
@@ -32,6 +39,20 @@ ADMIN_USER="${ADMIN_USER:-openclaw}"
 OPENCLAW_VER="${OPENCLAW_VER:-2026.4.5}"
 CLAWHUB_VER="${CLAWHUB_VER:-0.9.0}"
 NODE_MAJOR="${NODE_MAJOR:-22}"
+
+# Provider validation.
+case "$MODEL_PROVIDER" in
+  openai)
+    [[ -z "$OPENAI_API_KEY" ]] && { echo "MODEL_PROVIDER=openai requires OPENAI_API_KEY" >&2; exit 1; }
+    ;;
+  ollama)
+    : # no key needed
+    ;;
+  *)
+    echo "Unknown MODEL_PROVIDER: $MODEL_PROVIDER (use openai or ollama)" >&2
+    exit 1
+    ;;
+esac
 
 # Logging helpers.
 say()  { printf "\e[36m▶\e[0m %s\n" "$*"; }
@@ -91,6 +112,31 @@ ok "Docker running."
 if ! command -v code-server >/dev/null 2>&1; then
   say "Installing code-server…"
   curl -fsSL https://code-server.dev/install.sh | bash >/dev/null 2>&1
+fi
+
+# ── 5b. Ollama (only if MODEL_PROVIDER=ollama) ──────────────────────────
+if [[ "$MODEL_PROVIDER" == "ollama" ]]; then
+  if ! command -v ollama >/dev/null 2>&1; then
+    say "Installing Ollama…"
+    curl -fsSL https://ollama.com/install.sh | sh >/dev/null 2>&1
+  fi
+
+  # Ensure Ollama systemd service is running (installer usually does this).
+  systemctl enable --now ollama >/dev/null 2>&1 || true
+
+  # Wait for Ollama's HTTP API to come up before pulling.
+  say "Waiting for Ollama API to be ready…"
+  for _ in $(seq 1 30); do
+    curl -fsSL http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
+    sleep 2
+  done
+  curl -fsSL http://127.0.0.1:11434/api/version >/dev/null 2>&1 \
+    || fail "Ollama didn't come up — check: journalctl -u ollama -n 40"
+
+  say "Pulling ${OLLAMA_MODEL} (~2 GB download, ~3 min)…"
+  ollama pull "$OLLAMA_MODEL" >/dev/null 2>&1 \
+    || fail "ollama pull ${OLLAMA_MODEL} failed"
+  ok "Ollama + ${OLLAMA_MODEL} ready."
 fi
 
 # ── 6. OpenClaw + clawhub via npm ──────────────────────────────────────
@@ -170,15 +216,34 @@ ok "Gateway unit written."
 # BUG #1-fix: this heredoc is UN-QUOTED so bash expands ${OPENAI_API_KEY}
 # etc at write-time. The Vultr-generated script had them backslash-escaped,
 # which produced literal "${OPENAI_API_KEY}" strings in the config file.
-say "Writing openclaw.json with real values…"
+say "Writing openclaw.json with MODEL_PROVIDER=${MODEL_PROVIDER}…"
 install -d -o "$ADMIN_USER" -g "$ADMIN_USER" -m 700 \
   "/home/${ADMIN_USER}/.openclaw"
 
-cat > "/home/${ADMIN_USER}/.openclaw/openclaw.json" <<JSON
-{
-  "models": {
-    "providers": {
-      "openai": {
+# Model provider block — OpenAI or local Ollama.
+if [[ "$MODEL_PROVIDER" == "ollama" ]]; then
+  PROVIDER_JSON=$(cat <<JSON
+"ollama": {
+        "baseUrl": "http://127.0.0.1:11434/v1",
+        "apiKey": "ollama",
+        "auth": "bearer",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "${OLLAMA_MODEL}",
+            "name": "${OLLAMA_MODEL}",
+            "api": "openai-completions",
+            "input": ["text"],
+            "contextWindow": 131072,
+            "maxTokens": 4096
+          }
+        ]
+      }
+JSON
+)
+else
+  PROVIDER_JSON=$(cat <<JSON
+"openai": {
         "baseUrl": "https://api.openai.com/v1",
         "apiKey": "${OPENAI_API_KEY}",
         "auth": "bearer",
@@ -194,6 +259,15 @@ cat > "/home/${ADMIN_USER}/.openclaw/openclaw.json" <<JSON
           }
         ]
       }
+JSON
+)
+fi
+
+cat > "/home/${ADMIN_USER}/.openclaw/openclaw.json" <<JSON
+{
+  "models": {
+    "providers": {
+      ${PROVIDER_JSON}
     }
   },
   "agents": {
