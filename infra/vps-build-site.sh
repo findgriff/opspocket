@@ -28,7 +28,7 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/findgriff/opspocket.git}"
-BRANCH="${BRANCH:-landing-site}"
+BRANCH="${BRANCH:-main}"
 CHECKOUT_DIR="${CHECKOUT_DIR:-/opt/opspocket}"
 WEB_DIR="${WEB_DIR:-/var/www/opspocket}"
 NGINX_SITES="/etc/nginx/sites-available"
