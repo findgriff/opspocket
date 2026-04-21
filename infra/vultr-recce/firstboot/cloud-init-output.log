@@ -1,0 +1,117 @@
+Cloud-init v. 25.3-0ubuntu1~24.04.1 running 'init-local' at Tue, 21 Apr 2026 15:52:17 +0000. Up 9.72 seconds.
+2026-04-21 15:52:19,680 - log_util.py[WARNING]: Failed pickling datasource to /var/lib/cloud/instance/obj.pkl
+Cloud-init v. 25.3-0ubuntu1~24.04.1 running 'init' at Tue, 21 Apr 2026 15:52:22 +0000. Up 14.60 seconds.
+ci-info: ++++++++++++++++++++++++++++++++++++++Net device info+++++++++++++++++++++++++++++++++++++++
+ci-info: +--------+------+-----------------------------+---------------+--------+-------------------+
+ci-info: | Device |  Up  |           Address           |      Mask     | Scope  |     Hw-Address    |
+ci-info: +--------+------+-----------------------------+---------------+--------+-------------------+
+ci-info: | enp1s0 | True |        209.250.226.99       | 255.255.254.0 | global | 56:00:06:18:dc:1b |
+ci-info: | enp1s0 | True | fe80::5400:6ff:fe18:dc1b/64 |       .       |  link  | 56:00:06:18:dc:1b |
+ci-info: |   lo   | True |          127.0.0.1          |   255.0.0.0   |  host  |         .         |
+ci-info: |   lo   | True |           ::1/128           |       .       |  host  |         .         |
+ci-info: +--------+------+-----------------------------+---------------+--------+-------------------+
+ci-info: +++++++++++++++++++++++++++++++++Route IPv4 info+++++++++++++++++++++++++++++++++
+ci-info: +-------+-----------------+---------------+-----------------+-----------+-------+
+ci-info: | Route |   Destination   |    Gateway    |     Genmask     | Interface | Flags |
+ci-info: +-------+-----------------+---------------+-----------------+-----------+-------+
+ci-info: |   0   |     0.0.0.0     | 209.250.226.1 |     0.0.0.0     |   enp1s0  |   UG  |
+ci-info: |   1   |   108.61.10.10  | 209.250.226.1 | 255.255.255.255 |   enp1s0  |  UGH  |
+ci-info: |   2   | 169.254.169.254 | 209.250.226.1 | 255.255.255.255 |   enp1s0  |  UGH  |
+ci-info: |   3   |  209.250.226.0  |    0.0.0.0    |  255.255.254.0  |   enp1s0  |   U   |
+ci-info: |   4   |  209.250.226.1  |    0.0.0.0    | 255.255.255.255 |   enp1s0  |   UH  |
+ci-info: +-------+-----------------+---------------+-----------------+-----------+-------+
+ci-info: +++++++++++++++++++Route IPv6 info+++++++++++++++++++
+ci-info: +-------+-------------+---------+-----------+-------+
+ci-info: | Route | Destination | Gateway | Interface | Flags |
+ci-info: +-------+-------------+---------+-----------+-------+
+ci-info: |   0   |  fe80::/64  |    ::   |   enp1s0  |   U   |
+ci-info: |   2   |    local    |    ::   |   enp1s0  |   U   |
+ci-info: |   3   |  multicast  |    ::   |   enp1s0  |   U   |
+ci-info: +-------+-------------+---------+-----------+-------+
+Generating public/private rsa key pair.
+Your identification has been saved in /etc/ssh/ssh_host_rsa_key
+Your public key has been saved in /etc/ssh/ssh_host_rsa_key.pub
+The key fingerprint is:
+SHA256:Q0ENwE1LpKeoGwW8ULy17IQpJGOk3K1c0t39niIaoYs root@vultr
+The key's randomart image is:
++---[RSA 3072]----+
+|.o.  ..*Bo       |
+|==o + ooooo      |
+|*ooO =..+. .     |
+|..=oB. +    .    |
+| ..=o ..S    .   |
+|   o. . ..  . .  |
+|  o  . . . . o   |
+|   o. . o . .    |
+|  .E . .         |
++----[SHA256]-----+
+Generating public/private ecdsa key pair.
+Your identification has been saved in /etc/ssh/ssh_host_ecdsa_key
+Your public key has been saved in /etc/ssh/ssh_host_ecdsa_key.pub
+The key fingerprint is:
+SHA256:NE93I6m48dVBxcv3IWn1uZpgUZJte2kgQn17YE6ZmRg root@vultr
+The key's randomart image is:
++---[ECDSA 256]---+
+|        ...E= *o.|
+|         . * ^ ..|
+|        o o & % =|
+|       . = + @ %o|
+|        S o + * =|
+|         + +   ..|
+|        . o . o  |
+|             o   |
+|                 |
++----[SHA256]-----+
+Generating public/private ed25519 key pair.
+Your identification has been saved in /etc/ssh/ssh_host_ed25519_key
+Your public key has been saved in /etc/ssh/ssh_host_ed25519_key.pub
+The key fingerprint is:
+SHA256:052khg+TwJFLKZ++XbD4neqG/MfPVky2XjPjEpfLX50 root@vultr
+The key's randomart image is:
++--[ED25519 256]--+
+|      .o         |
+|    ..+.         |
+|     +oo    .    |
+|      +..+ + .o  |
+|     . .So+ o+ ..|
+|      o .*.  .+*+|
+|     . = +.. o=EB|
+|      + + =....+.|
+|       ++o oo . o|
++----[SHA256]-----+
+Cloud-init v. 25.3-0ubuntu1~24.04.1 running 'modules:config' at Tue, 21 Apr 2026 15:52:26 +0000. Up 18.12 seconds.
+Cloud-init v. 25.3-0ubuntu1~24.04.1 running 'modules:final' at Tue, 21 Apr 2026 15:52:28 +0000. Up 20.18 seconds.
+netlink error: Operation not supported
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 87380 33554432
+net.ipv4.conf.all.arp_filter = 1
+net.ipv6.conf.docker0.accept_ra = 2
+net.ipv6.conf.enp1s0.accept_ra = 2
+Connected to the local host. Press ^] three times within 1s to exit session.
+
+[1m[91m🦞 OpenClaw[39m[22m [93m2026.4.5[39m [31m(3e72c03)[39m
+   [31mThe only open-source project where the mascot could eat the competition.[39m
+
+Updated ~/.openclaw/openclaw.json
+Workspace OK: ~/.openclaw/workspace
+Sessions OK: ~/.openclaw/agents/main/sessions
+
+[31mInstalled systemd service:[39m [91m/home/openclaw/.config/systemd/user/openclaw-gateway.service[39m
+[?25l[90m|[39m
+[32mo[39m  
+[?25h[2K[93mAgents: main (default)[39m
+[93mHeartbeat interval: 30m (main)[39m
+[93mSession store (main): /home/openclaw/.openclaw/agents/main/sessions/sessions.json (0 entries)[39m
+Tip: run `openclaw configure --section web` to store your Brave API key for web_search. Docs: https://docs.openclaw.ai/tools/web
+Connection to the local host terminated.
+Connected to the local host. Press ^] three times within 1s to exit session.
+Connection to the local host terminated.
+
+Created symlink /etc/systemd/system/default.target.wants/code-server@openclaw.service → /usr/lib/systemd/system/code-server@.service.
+{"level":"warn","ts":1776786811.7279134,"msg":"unable to determine directory for user configuration; falling back to current directory","error":"neither $XDG_CONFIG_HOME nor $HOME are defined"}
+Created symlink /etc/systemd/system/multi-user.target.wants/caddy.service → /usr/lib/systemd/system/caddy.service.
+Waiting for TLS certificate issuance (up to 90s)...
+Certificate obtained!
+Cloud-init v. 25.3-0ubuntu1~24.04.1 finished at Tue, 21 Apr 2026 15:53:56 +0000. Datasource DataSourceVultr.  Up 108.85 seconds

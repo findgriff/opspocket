@@ -1,0 +1,2 @@
+/opt/opspocket/infra/install-openclaw.sh
+/opt/opspocket/infra/vps-build-site.sh

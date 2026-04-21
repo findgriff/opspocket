@@ -1,0 +1,60 @@
+b6cbe233-8999-4dda-a46d-6cd62f93720f.vultropenclaw.com {
+    tls {
+      issuer acme {
+        dir https://acme.zerossl.com/v2/DV90
+        eab ur6CkPWFhPtp8af1SASQEA dRKaIDk9u4tn7MYrHNczzl_tnKSJ8Hipb2IFVui3oxEHCj_3wkGBA-zG93X7NXaROh-pzDJOugrtn1nxxGasxw
+      }
+      issuer acme {
+        dir https://acme-v02.api.letsencrypt.org/directory
+      }
+    }
+
+    basic_auth {
+        clawmine $2a$14$xBai6P12paHKQ5XOURxuYe0Wf8bTzIe4l20liA/TKwzK6gVLP2J.y
+    }
+
+    handle /code/* {
+        uri strip_prefix /code
+        reverse_proxy 127.0.0.1:6969
+    }
+
+    handle {
+        reverse_proxy 127.0.0.1:18789 {
+            header_up -X-Real-IP
+            header_up -X-Forwarded-For
+            transport http {
+                versions 1.1
+            }
+        }
+    }
+}
+
+
+# ── OpsPocket landing site ────────────────────────────────────────────────
+# Serves both :80 and :443. Caddy auto-issues an internal self-signed cert
+# for :443, which Cloudflare accepts in "Full" (not "Full Strict") mode.
+# The CF edge terminates public TLS with its own cert, so browsers see a
+# trusted cert end-to-end.
+opspocket.com, www.opspocket.com {
+    tls internal
+
+    root * /var/www/opspocket
+    encode gzip zstd
+
+    try_files {path} {path}.html
+
+    file_server {
+        hide .*
+    }
+
+    handle_errors {
+        rewrite * /404.html
+        file_server
+    }
+
+    @static path /_next/static/*
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    @html path *.html /
+    header @html Cache-Control "public, max-age=300, must-revalidate"
+}

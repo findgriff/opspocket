@@ -1,0 +1,18 @@
+total 120
+drwxr-xr-x 5 root root  4096 Apr 21 15:53 .
+drwxr-xr-x 3 root root  4096 Apr 21 15:52 ..
+-rw-r--r-- 1 root root    68 Apr 21 15:53 boot-finished
+-rw------- 1 root root     0 Apr 21 15:52 cloud-config.txt
+-rw-r--r-- 1 root root    33 Apr 21 15:52 datasource
+drwxr-xr-x 2 root root  4096 Apr 21 15:52 handlers
+-rw------- 1 root root   258 Apr 21 15:52 network-config.json
+-r-------- 1 root root 41233 Apr 21 15:52 obj.pkl
+drwxr-xr-x 3 root root  4096 Apr 21 15:52 scripts
+drwxr-xr-x 2 root root  4096 Apr 21 15:53 sem
+-rw------- 1 root root     0 Apr 21 15:52 user-data.txt
+-rw------- 1 root root   308 Apr 21 15:52 user-data.txt.i
+-rw------- 1 root root   664 Apr 21 15:52 vendor-cloud-config.txt
+-rw------- 1 root root     0 Apr 21 15:52 vendor-data2.txt
+-rw------- 1 root root   308 Apr 21 15:52 vendor-data2.txt.i
+-rw------- 1 root root 13442 Apr 21 15:52 vendor-data.txt
+-rw------- 1 root root 13254 Apr 21 15:52 vendor-data.txt.i
