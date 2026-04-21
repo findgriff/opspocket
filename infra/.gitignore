@@ -1,3 +1,4 @@
 # Local tenant records — contain customer emails, IPs, and metadata
 # never commit these.
 tenants.json
+/.opspocket/
