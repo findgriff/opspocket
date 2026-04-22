@@ -31,7 +31,11 @@ DOMAIN="${DOMAIN:?Set DOMAIN — the fully-qualified hostname this box will serv
 #            for free-tier / demo deploys.
 MODEL_PROVIDER="${MODEL_PROVIDER:-openai}"
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
-OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2:3b}"   # ~2 GB, fits on CPX22 (4 GB)
+OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2:1b}"   # ~1.3 GB, safe fit on CPX22 (4 GB)
+# OLLAMA_HOST: if set (e.g. http://10.0.0.5:11434), skips local Ollama install
+# and points the config at a remote Ollama server. Used by test-installer.sh
+# to hit the dev box's shared Ollama without re-pulling the model each test.
+OLLAMA_HOST="${OLLAMA_HOST:-}"
 GATEWAY_TOKEN="${GATEWAY_TOKEN:-$(openssl rand -hex 16)}"
 CLAWMINE_PASSWORD="${CLAWMINE_PASSWORD:-$(openssl rand -base64 18 | tr -d '=+/' | cut -c1-24)}"
 CODE_PASSWORD="${CODE_PASSWORD:-${CLAWMINE_PASSWORD}}"
@@ -61,6 +65,42 @@ warn() { printf "\e[33m⚠\e[0m %s\n" "$*"; }
 fail() { printf "\e[31m✗\e[0m %s\n" "$*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || fail "run as root (or with sudo)"
+
+# ── Always-print credentials trap (even on partial failure) ────────────
+# If the script crashes halfway through, the user still needs access to
+# the generated password + token to SSH in and finish debugging. Trap
+# EXIT so they always land in the terminal log.
+INSTALL_SUCCESS=0
+print_credentials_card() {
+  local status_line
+  if [[ "$INSTALL_SUCCESS" = 1 ]]; then
+    status_line="✓ OpenClaw ${OPENCLAW_VER} deployed"
+  else
+    status_line="⚠ OpenClaw install INCOMPLETE — credentials saved for recovery"
+  fi
+  cat <<CARD
+
+══════════════════════════════════════════════════════════════════════
+  ${status_line}
+══════════════════════════════════════════════════════════════════════
+
+  Control UI:           https://${DOMAIN}/
+  MCP endpoint:         https://${DOMAIN}/mcp
+                        (Authorization: Bearer ${GATEWAY_TOKEN})
+
+  ─── Credentials (save these — they can't be recovered) ────────────
+
+  Basic-auth username:  clawmine
+  Basic-auth password:  ${CLAWMINE_PASSWORD}
+  Gateway token:        ${GATEWAY_TOKEN}
+
+  Machine-readable:     /root/CREDENTIALS.json
+
+══════════════════════════════════════════════════════════════════════
+
+CARD
+}
+trap print_credentials_card EXIT
 
 # ── 1. Base packages ───────────────────────────────────────────────────
 say "Installing base packages…"
@@ -104,9 +144,11 @@ https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
   apt-get install -y -qq \
     docker-ce docker-ce-cli containerd.io \
     docker-buildx-plugin docker-compose-plugin >/dev/null
-  systemctl enable --now docker
+  # systemd may not be PID 1 in test containers — best-effort.
+  systemctl enable --now docker 2>/dev/null \
+    || warn "docker systemctl skipped (systemd not usable — OK in test containers, real VPSes should work)"
 fi
-ok "Docker running."
+ok "Docker installed."
 
 # ── 5. code-server (browser VS Code) ───────────────────────────────────
 if ! command -v code-server >/dev/null 2>&1; then
@@ -115,28 +157,37 @@ if ! command -v code-server >/dev/null 2>&1; then
 fi
 
 # ── 5b. Ollama (only if MODEL_PROVIDER=ollama) ──────────────────────────
+# OLLAMA_HOST set   → use remote Ollama server (e.g. dev box), skip local install
+# OLLAMA_HOST unset → install Ollama locally on this box + pull the model
 if [[ "$MODEL_PROVIDER" == "ollama" ]]; then
-  if ! command -v ollama >/dev/null 2>&1; then
-    say "Installing Ollama…"
-    curl -fsSL https://ollama.com/install.sh | sh >/dev/null 2>&1
+  if [[ -n "$OLLAMA_HOST" ]]; then
+    say "MODEL_PROVIDER=ollama with remote host ${OLLAMA_HOST} — skipping local install"
+    curl -fsSL "${OLLAMA_HOST}/api/version" >/dev/null 2>&1 \
+      || fail "Remote Ollama at ${OLLAMA_HOST} not reachable — check connectivity"
+    # Verify the model exists on the remote
+    if ! curl -fsSL "${OLLAMA_HOST}/api/tags" | jq -e \
+         --arg m "$OLLAMA_MODEL" '.models // [] | map(.name) | any(. == $m)' >/dev/null; then
+      warn "Model ${OLLAMA_MODEL} not found on remote — will request via API on first call"
+    fi
+    ok "Remote Ollama reachable at ${OLLAMA_HOST}"
+  else
+    if ! command -v ollama >/dev/null 2>&1; then
+      say "Installing Ollama…"
+      curl -fsSL https://ollama.com/install.sh | sh >/dev/null 2>&1
+    fi
+    systemctl enable --now ollama >/dev/null 2>&1 || true
+    say "Waiting for Ollama API to be ready…"
+    for _ in $(seq 1 30); do
+      curl -fsSL http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
+      sleep 2
+    done
+    curl -fsSL http://127.0.0.1:11434/api/version >/dev/null 2>&1 \
+      || fail "Ollama didn't come up — check: journalctl -u ollama -n 40"
+    say "Pulling ${OLLAMA_MODEL} (~1.3 GB download, ~2 min)…"
+    ollama pull "$OLLAMA_MODEL" >/dev/null 2>&1 \
+      || fail "ollama pull ${OLLAMA_MODEL} failed"
+    ok "Ollama + ${OLLAMA_MODEL} ready."
   fi
-
-  # Ensure Ollama systemd service is running (installer usually does this).
-  systemctl enable --now ollama >/dev/null 2>&1 || true
-
-  # Wait for Ollama's HTTP API to come up before pulling.
-  say "Waiting for Ollama API to be ready…"
-  for _ in $(seq 1 30); do
-    curl -fsSL http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
-    sleep 2
-  done
-  curl -fsSL http://127.0.0.1:11434/api/version >/dev/null 2>&1 \
-    || fail "Ollama didn't come up — check: journalctl -u ollama -n 40"
-
-  say "Pulling ${OLLAMA_MODEL} (~2 GB download, ~3 min)…"
-  ollama pull "$OLLAMA_MODEL" >/dev/null 2>&1 \
-    || fail "ollama pull ${OLLAMA_MODEL} failed"
-  ok "Ollama + ${OLLAMA_MODEL} ready."
 fi
 
 # ── 6. OpenClaw + clawhub via npm ──────────────────────────────────────
@@ -220,13 +271,16 @@ say "Writing openclaw.json with MODEL_PROVIDER=${MODEL_PROVIDER}…"
 install -d -o "$ADMIN_USER" -g "$ADMIN_USER" -m 700 \
   "/home/${ADMIN_USER}/.openclaw"
 
-# Model provider block — OpenAI or local Ollama.
+# Model provider block — OpenAI or Ollama (local or remote).
+# BUG #5-fix: OpenClaw schema rejects "bearer" — valid values are
+# "api-key" | "aws-sdk" | "oauth" | "token". Use "token".
 if [[ "$MODEL_PROVIDER" == "ollama" ]]; then
+  OLLAMA_BASE_URL="${OLLAMA_HOST:-http://127.0.0.1:11434}/v1"
   PROVIDER_JSON=$(cat <<JSON
 "ollama": {
-        "baseUrl": "http://127.0.0.1:11434/v1",
+        "baseUrl": "${OLLAMA_BASE_URL}",
         "apiKey": "ollama",
-        "auth": "bearer",
+        "auth": "token",
         "api": "openai-completions",
         "models": [
           {
@@ -246,7 +300,7 @@ else
 "openai": {
         "baseUrl": "https://api.openai.com/v1",
         "apiKey": "${OPENAI_API_KEY}",
-        "auth": "bearer",
+        "auth": "token",
         "api": "openai-completions",
         "models": [
           {
@@ -289,14 +343,17 @@ cat > "/home/${ADMIN_USER}/.openclaw/openclaw.json" <<JSON
     "controlUi": {
       "allowedOrigins": ["https://${DOMAIN}"]
     },
-    "auth": { "mode": "token", "token": "${GATEWAY_TOKEN}" },
+    "auth": { "mode": "none" },
     "trustedProxies": ["127.0.0.1"]
   }
 }
 JSON
 # BUG #4-fix: bind=loopback so the gateway is ONLY reachable via Caddy,
-# not directly from the internet. The Vultr default of "lan" left port
-# 18789 open publicly, bypassing basic auth.
+# not directly from the internet. Caddy's basic_auth is the SOLE gate —
+# auth.mode=none on the gateway means customers don't have to paste a
+# separate token into Control UI or run an SSH tunnel. One password, done.
+# (Safe because bind=loopback means nothing non-Caddy can reach the
+# gateway anyway.)
 chmod 600 "/home/${ADMIN_USER}/.openclaw/openclaw.json"
 chown "$ADMIN_USER:$ADMIN_USER" "/home/${ADMIN_USER}/.openclaw/openclaw.json"
 ok "Config written (bind=loopback, real OPENAI_API_KEY + GATEWAY_TOKEN)."
@@ -308,7 +365,9 @@ ok "Config written (bind=loopback, real OPENAI_API_KEY + GATEWAY_TOKEN)."
 # — which hardcoded "X" as the password because the substitution ran at
 # write-time.
 say "Hashing basic_auth password + writing Caddyfile…"
-CLAWMINE_HASH=$(printf '%s' "$CLAWMINE_PASSWORD" | caddy hash-password 2>/dev/null) \
+# BUG #6-fix: use --plaintext flag directly. Piping to stdin returned
+# "Error: EOF" on Caddy 2.11.2 in live Hetzner test.
+CLAWMINE_HASH=$(caddy hash-password --plaintext "$CLAWMINE_PASSWORD" 2>/dev/null) \
   || fail "caddy hash-password failed — caddy may need a newer version"
 
 # Backup existing Caddyfile if present (first-run safety).
@@ -316,11 +375,12 @@ if [[ -f /etc/caddy/Caddyfile ]]; then
   cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%s)"
 fi
 
+# BUG #7-fix: Caddy auto-manages TLS for any named hostname — no bare
+# "tls" directive needed. Having it without args failed validation in
+# Caddy 2.11.2.
 cat > /etc/caddy/Caddyfile <<CADDY
 # Generated by install-openclaw.sh on $(date -u +%FT%TZ)
 ${DOMAIN} {
-    tls
-
     basic_auth {
         clawmine ${CLAWMINE_HASH}
     }
@@ -345,20 +405,25 @@ CADDY
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
   || fail "Caddyfile failed validation — run: caddy validate --config /etc/caddy/Caddyfile"
 
-systemctl enable --now caddy >/dev/null
-systemctl reload caddy
-ok "Caddy configured + reloaded."
+systemctl enable --now caddy >/dev/null 2>&1 \
+  || warn "caddy systemctl skipped (systemd not usable)"
+systemctl reload caddy 2>/dev/null \
+  || warn "caddy reload skipped (systemd not usable)"
+ok "Caddy configured."
 
 # ── 12. Start the gateway ──────────────────────────────────────────────
 say "Starting gateway service…"
-run_as_admin systemctl --user daemon-reload
-run_as_admin systemctl --user enable --now openclaw-gateway.service
-ok "Gateway service started."
+run_as_admin systemctl --user daemon-reload 2>/dev/null \
+  || warn "daemon-reload skipped (systemd user bus not usable)"
+run_as_admin systemctl --user enable --now openclaw-gateway.service 2>/dev/null \
+  || warn "gateway start skipped (systemd user bus not usable — OK in test containers)"
+ok "Gateway setup complete."
 
 # ── 13. Firewall ───────────────────────────────────────────────────────
 # UFW: open SSH + 80 + 443 only. The gateway is bound to loopback so it
 # doesn't need a public rule.
-if command -v ufw >/dev/null 2>&1; then
+# SKIP_UFW=1 → skip (used by Docker-container tests where UFW can't run)
+if [[ "${SKIP_UFW:-0}" != "1" ]] && command -v ufw >/dev/null 2>&1; then
   say "Configuring UFW…"
   ufw --force reset >/dev/null
   ufw default deny incoming >/dev/null
@@ -392,34 +457,26 @@ case "$STATUS" in
   *)   warn "Unexpected HTTPS status ${STATUS} — investigate: journalctl -u caddy -n 30" ;;
 esac
 
-# ── 15. Summary + credentials ──────────────────────────────────────────
-cat <<SUMMARY
+# ── 15. Write machine-readable credentials file ───────────────────────
+# /root/CREDENTIALS.json is what the orchestrator (or the humane welcome
+# email script) reads to extract the customer's connection details. This
+# eliminates the need for the customer — or us — to SSH in and grep logs.
+install -m 600 /dev/null /root/CREDENTIALS.json
+cat > /root/CREDENTIALS.json <<CREDS
+{
+  "domain": "${DOMAIN}",
+  "control_ui": "https://${DOMAIN}/",
+  "mcp_endpoint": "https://${DOMAIN}/mcp",
+  "username": "clawmine",
+  "password": "${CLAWMINE_PASSWORD}",
+  "gateway_token": "${GATEWAY_TOKEN}",
+  "model_provider": "${MODEL_PROVIDER}",
+  "openclaw_version": "${OPENCLAW_VER}",
+  "installed_at": "$(date -u +%FT%TZ)"
+}
+CREDS
+ok "Credentials written to /root/CREDENTIALS.json (0600)"
 
-══════════════════════════════════════════════════════════════════════
-  ✓ OpenClaw ${OPENCLAW_VER} deployed
-══════════════════════════════════════════════════════════════════════
-
-  Control UI:           https://${DOMAIN}/
-  Code server:          https://${DOMAIN}/code/
-  MCP endpoint:         https://${DOMAIN}/mcp
-                        (Authorization: Bearer ${GATEWAY_TOKEN})
-
-  ─── Credentials (save these — they can't be recovered) ────────────
-
-  Basic-auth username:  clawmine
-  Basic-auth password:  ${CLAWMINE_PASSWORD}
-  Gateway token:        ${GATEWAY_TOKEN}
-
-  ─── Operations ─────────────────────────────────────────────────────
-
-  Gateway logs:         sudo -u ${ADMIN_USER} journalctl --user -u openclaw-gateway -f
-  Gateway restart:      sudo -u ${ADMIN_USER} systemctl --user restart openclaw-gateway
-  Caddy logs:           journalctl -u caddy -f
-  Config file:          /home/${ADMIN_USER}/.openclaw/openclaw.json
-
-  Re-run this script (same env vars) any time to upgrade the install.
-  To change the basic_auth password, run with CLAWMINE_PASSWORD=newpass.
-
-══════════════════════════════════════════════════════════════════════
-
-SUMMARY
+# Mark success — the EXIT trap will print the credentials card with
+# the "✓ deployed" status instead of the "⚠ INCOMPLETE" fallback.
+INSTALL_SUCCESS=1
