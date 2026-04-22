@@ -150,10 +150,15 @@ https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
 fi
 ok "Docker installed."
 
-# ── 5. code-server (browser VS Code) ───────────────────────────────────
+# ── 5. code-server (browser VS Code) — optional ─────────────────────────
+# BUG #9-fix: code-server install is optional (only used for /code/* route).
+# If the install script upstream is broken or the network is flaky, don't
+# fail the whole deployment. Log and continue.
 if ! command -v code-server >/dev/null 2>&1; then
   say "Installing code-server…"
-  curl -fsSL https://code-server.dev/install.sh | bash >/dev/null 2>&1
+  if ! curl -fsSL https://code-server.dev/install.sh | bash >/var/log/opspocket/code-server-install.log 2>&1; then
+    warn "code-server install failed (see /var/log/opspocket/code-server-install.log) — continuing without it"
+  fi
 fi
 
 # ── 5b. Ollama (only if MODEL_PROVIDER=ollama) ──────────────────────────

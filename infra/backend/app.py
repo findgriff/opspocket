@@ -307,9 +307,12 @@ package_update: true
     curl -fsSL https://raw.githubusercontent.com/findgriff/opspocket/main/infra/install-openclaw.sh \\
       -o /root/install-openclaw.sh
     chmod +x /root/install-openclaw.sh
-    {env_str} \\
-      /root/install-openclaw.sh 2>&1 | tee /var/log/opspocket/install.log
-    touch /root/.opspocket-install-complete
+    if {env_str} \\
+         /root/install-openclaw.sh 2>&1 | tee /var/log/opspocket/install.log; then
+      touch /root/.opspocket-install-complete
+    else
+      echo "install-openclaw.sh FAILED — not touching completion marker" | tee -a /var/log/opspocket/install.log
+    fi
 """
 
 
