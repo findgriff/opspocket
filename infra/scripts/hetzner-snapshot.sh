@@ -47,7 +47,7 @@ die()  { err "$*"; exit "${2:-1}"; }
 
 # ── Load token ─────────────────────────────────────────────────────────
 if [[ -z "${HETZNER_TOKEN:-}" ]]; then
-  for f in /etc/opspocket/hetzner-token "$HOME/.opspocket/hetzner-token"; do
+  for f in /etc/opspocket/hetzner-token "${HOME:-/root}/.opspocket/hetzner-token"; do
     if [[ -r "$f" ]]; then
       HETZNER_TOKEN="$(tr -d ' \t\r\n' < "$f")"
       export HETZNER_TOKEN
