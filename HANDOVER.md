@@ -1,6 +1,6 @@
 # OpsPocket — Project Handover
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-22 (audit pass by Lead DevOps)
 **Bundle ID (app):** co.opspocket.opspocket
 **Flutter:** 3.41.7 / Dart 3.11.5
 
@@ -129,22 +129,71 @@ Chronological, newest last:
 
 ---
 
-## Known issues
+## Audit pass — 2026-04-22
 
+Full health audit of everything built this session. Results:
+
+### Completed & verified healthy
+
+- Dev box (`opspocket-dev`, 178.104.242.211): uptime 17h, 18% disk, 12 GB free RAM, load 0.01.
+- Caddy active + serving all 8 site configs. All production domains return 2xx/3xx as expected (HTTP audit matrix below).
+- `opspocket-backend.service` (Stripe webhook + orchestrator) active on 127.0.0.1:8092. DB initialised at `/var/lib/opspocket/tenants.db`. Running in `ORCHESTRATOR_DRY_RUN=1` — safe default until Stripe live-mode keys land.
+- `opspocket-waitlist.service` active on 127.0.0.1:8091, 2 test signups recorded.
+- `opspocket-snapshot.timer` active; next run 2026-04-23 04:00 UTC. 1 snapshot on record (`379026663`, created 07:47 today).
+- `uptime-kuma` container healthy, accessible at `status.opspocket.com` (401 basic-auth, correct).
+- 5 running Docker containers (forms-api, dafc-forms, forms-db-mariadb, glowpower, vantabiolabs, uptime-kuma) — all `Up` for 7–9h.
+- Tenant DB holds 3 validation records (all destroyed + DNS purged). Schema matches backend code; no drift.
+- Namecheap Private Email DNS records live (MX, SPF, DKIM, DMARC); inbound delivery confirmed end-to-end earlier today.
+
+**HTTP audit matrix (all validated):**
+
+| Host | Result |
+|---|---|
+| opspocket.com | 200 |
+| www.opspocket.com | 301 → opspocket.com |
+| opspocket.com/cloud | 200 |
+| opspocket.com/blog/ | **200** (fixed this pass, was 404) |
+| darleyabbeyfc.com | 200 |
+| www.darleyabbeyfc.com | 301 |
+| glowpower.co.uk | 200 |
+| www.glowpower.co.uk | 301 |
+| magichairstyler.com | 200 |
+| www.magichairstyler.com | 301 |
+| vantabiolabs.xyz | 200 |
+| www.vantabiolabs.xyz | 301 |
+| hello.dev.opspocket.com | 200 |
+| status.opspocket.com | 401 (basic-auth, expected) |
+| forms.darleyabbeyfc.com | 404 root (expected — POST-only form endpoint) |
+| forms.aressentinel.com | 404 root (expected — POST-only form endpoint) |
+
+### Fixed during this audit
+
+1. **Blog index 404** — `/blog/` directly returned 404 because no `index.html` existed. Created `site-v2/blog/index.html` listing the four existing posts with OpsPocket dark theme, deployed to `/var/www/opspocket.com/blog/index.html` on dev box. Now returns 200.
+2. **Postfix deferred queue** — three emails (2× welcome to findgriff@gmail.com, 1× to findgriff+realtest2@gmail.com) had been stuck in the queue since 09:24–09:51 today with `dsn=4.3.2 deferred transport` (Hetzner blocks port 25 outbound). Flushed all three with `postsuper -d`. Queue now empty. Permanent fix requires configuring a relay (Resend/Mailgun/SMTP2GO) via `infra/scripts/configure-smtp-relay.sh` once API key is obtained.
+
+### Known issues (unfixed, low impact)
+
+- **CI `installer-ci` workflow failing** on last 5 runs. Root cause: `openclaw-gateway` `systemd --user` service does not start inside a `--privileged` Docker container on GitHub Actions (no login session for the openclaw user). The real `infra/test-installer.sh` against a Hetzner VM passes; this is a CI-environment fidelity issue, not a real installer bug. Real tenant `177d1918` reached `active` state in 10 min earlier today. Plan: either use `machinectl`-based Ubuntu image in CI, or gate the gateway check behind a `CI_ENV=1` soft-fail, or replace smoke-test with a Hetzner-integration test on a tag push.
+- **Flutter `analyze` reports 66 issues** — all `info` level (trailing commas, `use_build_context_synchronously`, one `unawaited_futures`). No errors, no warnings. Style-only; safe to ignore or clean up in a dedicated pass.
 - **`www.magichairstyler.com` → root redirect** — `infra/caddy-sites/magichairstyler.caddy` has the standard `redir https://magichairstyler.com{uri} permanent` block, identical to the pattern used for `opspocket.com` and `glowpower.co.uk`. Users have reported the redirect not firing on some paths. Suspect a Cloudflare edge cache of an earlier failing response; purge `www.magichairstyler.com/*` at the CF edge and re-test. If that doesn't fix it, compare headers against `www.glowpower.co.uk` which uses the same pattern successfully.
 
 ---
 
 ## Outstanding work
 
-### Cloud (to go from waitlist → sellable)
+### Cloud — must complete to go live
 
-- **Stripe integration** — Checkout sessions for all three tiers, monthly + annual.
-- **Customer welcome email template** — transactional email on signup + on provisioning-complete.
-- **Signup orchestrator** — auto-run `provision-tenant.sh` on Stripe `checkout.session.completed` webhook; wire in failure/retry logic.
-- **Customer account dashboard** — `opspocket.com/account`: login, tier, billing, VPS status, basic ops (reboot, re-provision, download creds).
-- **SaaS admin panel** — founder-only view of tenants, revenue, live boxes, logs.
-- **Destroy DigitalOcean droplet** — `188.166.150.21` is still alive as emergency rollback for the 6-site migration. Kill once the dev box has run cleanly for a few more days.
+| # | Task | Owner action | Blocker? |
+|---|---|---|---|
+| 1 | **Stripe → live mode** | User must generate `sk_live_*` key in Stripe dashboard + paste into `/etc/opspocket/stripe-api-key` on dev box, update webhook secret, flip `ORCHESTRATOR_DRY_RUN=0` in `/etc/opspocket/backend.env`, `systemctl restart opspocket-backend`. | ⚠️ Needs owner |
+| 2 | **Live Stripe Payment Links** | Recreate each Payment Link in live mode (6 total — 3 tiers × month/year) and swap URLs in `site-v2/cloud.html` `STRIPE_LINKS`. | ⚠️ Needs owner |
+| 3 | **SMTP relay for outbound mail** | Sign up to Resend / Mailgun / SMTP2GO / Postmark; run `infra/scripts/configure-smtp-relay.sh` on dev box with the provided API key; add SPF/DKIM/DMARC on `mail.opspocket.com` via CF API (script self-generates the records to publish). | ⚠️ Needs owner (Resend signup) |
+| 4 | **End-to-end live test** | After (1)+(2)+(3) are in place: buy Starter annual on the public site with a real card, verify VPS provisions + welcome email delivers + Stripe Portal cancel works. Expected duration: 10–12 min. | Blocked on 1–3 |
+| 5 | **Destroy DigitalOcean droplet** `188.166.150.21` | Already shut down (port 80 unreachable, SSH fingerprint rotated — means either powered-off or DO recycled the instance). Confirm in DO console + click Destroy. | ⚠️ Needs owner |
+
+### Cloud — deferred until above lands
+
+- **Customer account dashboard (`/account`)** and **SaaS admin panel** — both blocked on Stripe being live + a tenants query API. Design captured in `docs/superpowers/specs/2026-04-22-blocked-saas-ui.md`. ~1 week of work once unblocked.
 
 ### App
 
