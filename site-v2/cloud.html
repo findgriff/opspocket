@@ -894,17 +894,18 @@
     el.style.visibility = 'hidden';
   });
 
-  // ── Stripe Payment Links (test mode) ────────────────────────────
-  // One URL per tier × billing period. Generated via Stripe API — see
-  // site-v2/_stripe-links.json for provenance. Replace when we switch
-  // test → live.
+  // ── Stripe Payment Links (LIVE) ─────────────────────────────────
+  // Generated via Stripe API 2026-04-22 on live account OpsPocket
+  // (acct_1H1LXtG8rZzTnbqH). One URL per tier × billing period.
+  // Currency: GBP. Statement descriptor on customer card: OPSPOCKET.
+  // Redirect after payment: /cloud?success=1&tier=<tier_label>.
   const STRIPE_LINKS = {
-    starter_monthly: 'https://buy.stripe.com/test_5kQ5kD97K1nM97dh0Ecs800',
-    starter_annual:  'https://buy.stripe.com/test_bJebJ15Vyeay5V1bGkcs801',
-    pro_monthly:     'https://buy.stripe.com/test_cNi6oH1Fi9Ui83939Ocs802',
-    pro_annual:      'https://buy.stripe.com/test_9B64gz97KeayerxcKocs803',
-    agency_monthly:  'https://buy.stripe.com/test_5kQ7sLbfSgiG2IP8u8cs804',
-    agency_annual:   'https://buy.stripe.com/test_bJe3cv2Jm3vU3MTdOscs805',
+    starter_monthly: 'https://buy.stripe.com/bJebJ15Vyeay5V1bGkcs801',
+    starter_annual:  'https://buy.stripe.com/cNi6oH1Fi9Ui83939Ocs802',
+    pro_monthly:     'https://buy.stripe.com/9B64gz97KeayerxcKocs803',
+    pro_annual:      'https://buy.stripe.com/5kQ7sLbfSgiG2IP8u8cs804',
+    agency_monthly:  'https://buy.stripe.com/bJe3cv2Jm3vU3MTdOscs805',
+    agency_annual:   'https://buy.stripe.com/aFa6oHgAc3vUdntbGkcs806',
   };
 
   // Buy button — reads the current billing toggle + routes to the right link
