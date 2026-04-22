@@ -1,0 +1,46 @@
+# OpsPocket dev box Caddyfile
+#
+# Uses Cloudflare DNS-01 challenge to get wildcard cert for *.dev.opspocket.com
+# CLOUDFLARE_API_TOKEN comes from /etc/caddy/cloudflare.env
+{
+	email findgriff@gmail.com
+}
+
+# ── Test landing page: hello.dev.opspocket.com ────────────────────
+# Once this works, we know wildcard TLS is live.
+hello.dev.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	respond "✓ Wildcard TLS works — dev box reachable at {host}" 200 {
+		close
+	}
+}
+
+# ── Catch-all for future test tenants ─────────────────────────────
+# Anything at *.dev.opspocket.com that doesn't match above → helpful message
+*.dev.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	respond "No tenant configured at {host} yet" 404
+}
+
+# ── Public site: opspocket.com ────────────────────────────────────
+# Original hand-rolled HTML recovered from the DO droplet.
+# TLS via Cloudflare DNS-01 (works regardless of CF proxy state).
+opspocket.com, www.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	@www host www.opspocket.com
+	redir @www https://opspocket.com{uri} 301
+
+	handle /api/waitlist {
+		reverse_proxy 127.0.0.1:8091
+	}
+
+	root * /var/www/opspocket.com
+	try_files {path} {path}.html {path}/index.html
+	file_server
+}

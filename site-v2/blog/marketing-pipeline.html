@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Marketing Pipeline — Five Agents, One System | OpsPocket Blog</title>
+  <meta name="description" content="Meet Atlas, Echo, Foundry, Stack, and Catalyst — five specialized OpenClaw agents that run a complete marketing pipeline from research to results, autonomously." />
+  <link rel="canonical" href="https://www.opspocket.com/blog/marketing-pipeline.html" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://www.opspocket.com/blog/marketing-pipeline.html" />
+  <meta property="og:title" content="The Marketing Pipeline — Five Agents, One System" />
+  <meta property="og:description" content="Atlas finds the opportunity. Echo defines the message. Foundry builds the assets. Stack wires it up. Catalyst improves it. Five agents, one pipeline." />
+  <meta property="og:image" content="https://www.opspocket.com/images/hero.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red:     #FF3B1F;
+      --cyan:    #00E5FF;
+      --bg:      #060608;
+      --surface: #0D0E12;
+      --card:    #111318;
+      --border:  rgba(255,255,255,0.07);
+      --muted:   #8A93A1;
+      --text:    #E8EAF0;
+      /* Agent accent colours */
+      --atlas:   #3B82F6;
+      --echo:    #A855F7;
+      --foundry: #F97316;
+      --stack:   #10B981;
+      --catalyst:#EC4899;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; line-height: 1.7; }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(6,6,8,0.92); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 64px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; color: var(--text); text-decoration: none; }
+    .nav-logo img { width: 36px; height: 36px; border-radius: 10px; }
+    .nav-logo-text { font-size: 18px; font-weight: 800; }
+    .nav-logo-text span { color: var(--red); }
+    .nav-links { display: flex; align-items: center; gap: 4px; list-style: none; }
+    .nav-links a {
+      font-size: 14px; font-weight: 500; color: var(--muted);
+      padding: 7px 14px; border-radius: 8px; transition: all 0.2s; text-decoration: none;
+    }
+    .nav-links a:hover { color: var(--text); background: rgba(255,255,255,0.06); text-decoration: none; }
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+    @media (max-width: 700px) { .nav-links { display: none; } }
+
+    /* ── Gradient text ── */
+    .gradient-text {
+      background: linear-gradient(135deg, var(--red) 0%, #FF6B4A 50%, var(--cyan) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    /* ── Hero ── */
+    .article-hero {
+      position: relative; overflow: hidden;
+      padding: 80px 24px 60px;
+      text-align: center;
+    }
+    .glow-orb {
+      position: absolute; border-radius: 50%; pointer-events: none;
+      filter: blur(80px); opacity: 0.18;
+    }
+    .glow-orb.red  { width: 600px; height: 400px; background: var(--red); top: -80px; left: 50%; transform: translateX(-50%); }
+    .glow-orb.cyan { width: 300px; height: 300px; background: var(--cyan); top: 60px; right: 10%; opacity: 0.08; }
+
+    .article-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(0,229,255,0.08);
+      border: 1px solid rgba(0,229,255,0.25);
+      padding: 6px 16px; border-radius: 100px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+      color: var(--cyan); margin-bottom: 24px;
+    }
+
+    .article-hero h1 {
+      font-size: clamp(32px, 5vw, 64px); font-weight: 900; letter-spacing: -2px;
+      line-height: 1.05; max-width: 860px; margin: 0 auto 20px;
+    }
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 20px); color: var(--muted); max-width: 600px;
+      margin: 0 auto 0; line-height: 1.6;
+    }
+
+    /* ── Pipeline flow bar ── */
+    .pipeline-bar {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0; padding: 36px 24px; flex-wrap: wrap;
+      max-width: 900px; margin: 0 auto;
+    }
+    .pipeline-step {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 16px 24px; border-radius: 14px;
+      background: var(--card); border: 1px solid var(--border);
+      min-width: 120px; text-align: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .pipeline-step:hover { transform: translateY(-3px); }
+    .pipeline-step .ps-emoji { font-size: 22px; }
+    .pipeline-step .ps-name { font-size: 13px; font-weight: 800; }
+    .pipeline-step .ps-role { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+    .pipeline-step.atlas  { border-color: rgba(59,130,246,0.35); box-shadow: 0 0 20px rgba(59,130,246,0.1); }
+    .pipeline-step.echo   { border-color: rgba(168,85,247,0.35); box-shadow: 0 0 20px rgba(168,85,247,0.1); }
+    .pipeline-step.foundry{ border-color: rgba(249,115,22,0.35); box-shadow: 0 0 20px rgba(249,115,22,0.1); }
+    .pipeline-step.stack  { border-color: rgba(16,185,129,0.35); box-shadow: 0 0 20px rgba(16,185,129,0.1); }
+    .pipeline-step.catalyst{ border-color: rgba(236,72,153,0.35); box-shadow: 0 0 20px rgba(236,72,153,0.1); }
+    .pipeline-arrow {
+      color: var(--muted); font-size: 18px; padding: 0 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Content ── */
+    .article-body {
+      max-width: 800px; margin: 0 auto; padding: 20px 24px 100px;
+    }
+    .article-body h2 {
+      font-size: clamp(22px, 2.8vw, 32px); font-weight: 800; letter-spacing: -0.5px;
+      margin: 56px 0 18px;
+    }
+    .article-body h2:first-child { margin-top: 0; }
+    .article-body h3 { font-size: 18px; font-weight: 700; margin: 32px 0 12px; }
+    .article-body p { font-size: 16px; color: var(--text); margin-bottom: 18px; line-height: 1.8; }
+    .article-body p.lead {
+      font-size: 20px; font-weight: 400; line-height: 1.75; color: var(--text);
+      margin-bottom: 48px;
+    }
+    .article-body ul, .article-body ol { padding-left: 24px; margin-bottom: 20px; }
+    .article-body li { font-size: 16px; line-height: 1.8; margin-bottom: 8px; }
+    .article-body li::marker { color: var(--red); }
+    .article-body strong { color: #fff; font-weight: 700; }
+    .article-body code {
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      background: rgba(255,255,255,0.06); padding: 2px 7px; border-radius: 5px;
+    }
+
+    /* ── Agent cards ── */
+    .agent-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px 28px; margin: 28px 0;
+      position: relative; overflow: hidden;
+    }
+    .agent-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .agent-card.atlas::before   { background: linear-gradient(90deg, var(--atlas), transparent); }
+    .agent-card.echo::before    { background: linear-gradient(90deg, var(--echo), transparent); }
+    .agent-card.foundry::before { background: linear-gradient(90deg, var(--foundry), transparent); }
+    .agent-card.stack::before   { background: linear-gradient(90deg, var(--stack), transparent); }
+    .agent-card.catalyst::before{ background: linear-gradient(90deg, var(--catalyst), transparent); }
+
+    .agent-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .agent-icon {
+      width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+    }
+    .agent-card.atlas   .agent-icon { background: rgba(59,130,246,0.12); }
+    .agent-card.echo    .agent-icon { background: rgba(168,85,247,0.12); }
+    .agent-card.foundry .agent-icon { background: rgba(249,115,22,0.12); }
+    .agent-card.stack   .agent-icon { background: rgba(16,185,129,0.12); }
+    .agent-card.catalyst .agent-icon{ background: rgba(236,72,153,0.12); }
+
+    .agent-name { font-size: 20px; font-weight: 800; margin-bottom: 2px; }
+    .agent-card.atlas    .agent-name { color: var(--atlas); }
+    .agent-card.echo     .agent-name { color: var(--echo); }
+    .agent-card.foundry  .agent-name { color: var(--foundry); }
+    .agent-card.stack    .agent-name { color: var(--stack); }
+    .agent-card.catalyst .agent-name { color: var(--catalyst); }
+    .agent-role { font-size: 13px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .agent-body p { font-size: 15px; color: var(--muted); margin-bottom: 16px; line-height: 1.7; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .tag {
+      font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 100px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .agent-card.atlas    .tag { background: rgba(59,130,246,0.1);  color: var(--atlas);   border: 1px solid rgba(59,130,246,0.2); }
+    .agent-card.echo     .tag { background: rgba(168,85,247,0.1);  color: var(--echo);    border: 1px solid rgba(168,85,247,0.2); }
+    .agent-card.foundry  .tag { background: rgba(249,115,22,0.1);  color: var(--foundry); border: 1px solid rgba(249,115,22,0.2); }
+    .agent-card.stack    .tag { background: rgba(16,185,129,0.1);  color: var(--stack);   border: 1px solid rgba(16,185,129,0.2); }
+    .agent-card.catalyst .tag { background: rgba(236,72,153,0.1);  color: var(--catalyst);border: 1px solid rgba(236,72,153,0.2); }
+
+    /* ── Two-col output grid ── */
+    .output-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0;
+    }
+    .output-item {
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px;
+      font-size: 13px; color: var(--muted); line-height: 1.5;
+    }
+    .output-item strong { color: var(--text); font-size: 12px; display: block; margin-bottom: 2px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.3px; }
+
+    /* ── Worked example ── */
+    .example-box {
+      background: linear-gradient(135deg, rgba(255,59,31,0.05), rgba(0,229,255,0.03));
+      border: 1px solid rgba(255,59,31,0.2); border-radius: 20px;
+      padding: 40px 36px; margin: 48px 0;
+    }
+    .example-box h2 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+    .example-box .sub { font-size: 14px; color: var(--muted); margin-bottom: 32px; font-family: 'JetBrains Mono', monospace; }
+
+    .example-step {
+      display: flex; gap: 20px; padding-bottom: 32px;
+      border-left: 2px solid var(--border); margin-left: 14px; padding-left: 28px;
+      position: relative;
+    }
+    .example-step:last-child { padding-bottom: 0; border-left-color: transparent; }
+    .ex-dot {
+      position: absolute; left: -9px; top: 4px;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border); background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 800; font-family: 'JetBrains Mono', monospace;
+    }
+    .ex-dot.atlas    { background: var(--atlas);   border-color: var(--atlas);   color: #fff; }
+    .ex-dot.echo     { background: var(--echo);    border-color: var(--echo);    color: #fff; }
+    .ex-dot.foundry  { background: var(--foundry); border-color: var(--foundry); color: #fff; }
+    .ex-dot.stack    { background: var(--stack);   border-color: var(--stack);   color: #fff; }
+    .ex-dot.catalyst { background: var(--catalyst);border-color: var(--catalyst);color: #fff; }
+
+    .ex-content h4 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .ex-content p  { font-size: 14px; color: var(--muted); margin: 0; line-height: 1.65; }
+    .ex-content .ex-output {
+      margin-top: 10px; padding: 10px 14px;
+      background: rgba(255,255,255,0.03); border-radius: 8px;
+      border-left: 3px solid var(--border);
+      font-size: 13px; color: var(--muted); line-height: 1.6;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .example-step.atlas   .ex-output { border-left-color: var(--atlas); }
+    .example-step.echo    .ex-output { border-left-color: var(--echo); }
+    .example-step.foundry .ex-output { border-left-color: var(--foundry); }
+    .example-step.stack   .ex-output { border-left-color: var(--stack); }
+    .example-step.catalyst .ex-output{ border-left-color: var(--catalyst); }
+
+    .command-box {
+      background: #0A0A0C; border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 22px; margin: 32px 0;
+      font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 1.7;
+    }
+    .command-box .prompt { color: var(--red); }
+    .command-box .cmd    { color: var(--cyan); }
+    .command-box .comment{ color: var(--muted); }
+
+    /* ── Divider ── */
+    .section-divider {
+      border: none; border-top: 1px solid var(--border); margin: 48px 0;
+    }
+
+    /* ── CTA ── */
+    .article-cta {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 48px 40px; text-align: center; margin-top: 64px;
+    }
+    .article-cta h2 { font-size: 26px; font-weight: 800; margin-bottom: 12px; }
+    .article-cta p { color: var(--muted); margin-bottom: 28px; font-size: 16px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 24px; border-radius: 10px; font-weight: 700; font-size: 14px;
+      cursor: pointer; transition: all 0.25s; text-decoration: none; border: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--red), #FF6B4A); color: #fff;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(255,59,31,0.35); text-decoration: none; }
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 24px; border-radius: 10px; font-weight: 700; font-size: 14px;
+      cursor: pointer; transition: all 0.25s; text-decoration: none;
+      background: transparent; color: var(--text); border: 1px solid var(--border);
+    }
+    .btn-outline:hover { border-color: rgba(255,255,255,0.3); text-decoration: none; }
+
+    footer { border-top: 1px solid var(--border); padding: 32px 24px; text-align: center; }
+    footer p { font-size: 13px; color: var(--muted); }
+
+    @media (max-width: 640px) {
+      .pipeline-bar { gap: 4px; }
+      .pipeline-step { min-width: 80px; padding: 12px 14px; }
+      .pipeline-arrow { padding: 0 2px; font-size: 14px; }
+      .output-grid { grid-template-columns: 1fr; }
+      .example-box { padding: 28px 20px; }
+      .article-cta { padding: 32px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="nav-inner">
+    <a href="../index.html" class="nav-logo">
+      <img src="../images/logo.png" alt="OpsPocket Logo" />
+      <span class="nav-logo-text"><span>Ops</span>Pocket</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="../index.html#features">Features</a></li>
+      <li><a href="../index.html#pricing">Pricing</a></li>
+      <li><a href="../index.html#videos">Videos</a></li>
+      <li><a href="../index.html#blog">Blog</a></li>
+      <li><a href="../index.html#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="../index.html#pricing" class="btn btn-primary" style="padding:10px 20px;font-size:14px;">Get Started →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<header class="article-hero">
+  <div class="glow-orb red"></div>
+  <div class="glow-orb cyan"></div>
+
+  <div class="article-tag">OpenClaw Agents</div>
+  <h1>Five Agents.<br /><span class="gradient-text">One Pipeline.</span></h1>
+  <p class="hero-sub">
+    Meet the marketing team that never sleeps — Atlas, Echo, Foundry, Stack, and Catalyst. Each agent owns a distinct phase of the pipeline, from research to results.
+  </p>
+
+  <!-- Pipeline flow bar -->
+  <div class="pipeline-bar">
+    <div class="pipeline-step atlas">
+      <span class="ps-emoji">🔭</span>
+      <span class="ps-name">Atlas</span>
+      <span class="ps-role">Intelligence</span>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step echo">
+      <span class="ps-emoji">📡</span>
+      <span class="ps-name">Echo</span>
+      <span class="ps-role">Messaging</span>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step foundry">
+      <span class="ps-emoji">⚒️</span>
+      <span class="ps-name">Foundry</span>
+      <span class="ps-role">Production</span>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step stack">
+      <span class="ps-emoji">🔧</span>
+      <span class="ps-name">Stack</span>
+      <span class="ps-role">Systems</span>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step catalyst">
+      <span class="ps-emoji">📈</span>
+      <span class="ps-name">Catalyst</span>
+      <span class="ps-role">Optimisation</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Body ── -->
+<article class="article-body">
+
+  <p class="lead">
+    Most marketing teams context-switch constantly — jumping between research, writing, technical setup, and performance review. This pipeline separates each of those concerns into a dedicated agent with a specific mandate. No one agent does everything. Together, they do it all.
+  </p>
+
+  <h2>Why a Pipeline Instead of One Agent?</h2>
+  <p>
+    Giving a single agent the instruction "run a full marketing campaign" produces mediocre results. The output reflects the average of everything rather than the depth of anything. A specialist pipeline works differently: each agent brings focused reasoning to its narrow domain, and hands off structured, decision-quality outputs to the next stage.
+  </p>
+  <p>
+    Atlas does not write copy. Foundry does not do research. Stack does not invent strategy. The boundaries keep each agent sharp — and the handoff chain keeps the whole thing coherent.
+  </p>
+
+  <hr class="section-divider" />
+  <h2>The Agents</h2>
+
+  <!-- ── Atlas ── -->
+  <div class="agent-card atlas">
+    <div class="agent-header">
+      <div class="agent-icon">🔭</div>
+      <div>
+        <div class="agent-name">Atlas</div>
+        <div class="agent-role">Market Intelligence Agent</div>
+      </div>
+    </div>
+    <div class="agent-body">
+      <p>
+        Atlas goes first. Before any message is written or any asset is produced, Atlas maps the landscape — who the audience actually is, what they urgently care about, where competitors are weak, and which campaign angles have the strongest underlying demand.
+      </p>
+      <p>
+        Its outputs aren't opinions. They're structured research: audience profiles, pain point matrices, competitor observations, and specific campaign angles with reasoning. Every downstream agent builds on what Atlas produces.
+      </p>
+      <div class="tag-row">
+        <span class="tag">Audience Research</span>
+        <span class="tag">ICP Mapping</span>
+        <span class="tag">Competitor Analysis</span>
+        <span class="tag">Trend Spotting</span>
+        <span class="tag">Campaign Angles</span>
+        <span class="tag">Objection Discovery</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Echo ── -->
+  <div class="agent-card echo">
+    <div class="agent-header">
+      <div class="agent-icon">📡</div>
+      <div>
+        <div class="agent-name">Echo</div>
+        <div class="agent-role">Positioning & Messaging Agent</div>
+      </div>
+    </div>
+    <div class="agent-body">
+      <p>
+        Echo takes Atlas's research and translates it into the language a campaign actually needs. It defines what the offer should say, what emotions it should trigger, and which specific words will resonate with which audience segments.
+      </p>
+      <p>
+        The output isn't a finished ad — it's a messaging architecture. Value propositions, positioning statements, hook options, CTA variants, and objection-handling language that Foundry then uses to produce actual assets.
+      </p>
+      <div class="tag-row">
+        <span class="tag">Value Propositions</span>
+        <span class="tag">Message Pillars</span>
+        <span class="tag">Hook Writing</span>
+        <span class="tag">CTA Development</span>
+        <span class="tag">Offer Framing</span>
+        <span class="tag">Persona Variants</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Foundry ── -->
+  <div class="agent-card foundry">
+    <div class="agent-header">
+      <div class="agent-icon">⚒️</div>
+      <div>
+        <div class="agent-name">Foundry</div>
+        <div class="agent-role">Creative Production Agent</div>
+      </div>
+    </div>
+    <div class="agent-body">
+      <p>
+        Foundry is where strategy becomes deliverables. Given approved positioning and campaign goals, it produces the actual materials: email sequences, ad copy, landing page copy, social posts, scripts, content calendars, and creative briefs ready for execution.
+      </p>
+      <p>
+        Foundry doesn't invent strategy — it executes against what's already been decided upstream. That constraint keeps output focused and consistent. When gaps exist, Foundry flags them rather than filling them with guesswork.
+      </p>
+      <div class="tag-row">
+        <span class="tag">Email Copy</span>
+        <span class="tag">Ad Creative</span>
+        <span class="tag">Landing Pages</span>
+        <span class="tag">Social Posts</span>
+        <span class="tag">Content Calendars</span>
+        <span class="tag">A/B Variants</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stack ── -->
+  <div class="agent-card stack">
+    <div class="agent-header">
+      <div class="agent-icon">🔧</div>
+      <div>
+        <div class="agent-name">Stack</div>
+        <div class="agent-role">Marketing Systems & Full-Stack Agent</div>
+      </div>
+    </div>
+    <div class="agent-body">
+      <p>
+        Stack owns the technical layer. Landing pages, forms, CRM connections, analytics events, UTM structures, lead routing logic, automation setup — everything that turns marketing concepts into working systems that actually capture and convert.
+      </p>
+      <p>
+        Its output is operational infrastructure: implementation plans, tracking specs, CRM field mappings, QA checklists, and deployment steps. Stack thinks like a marketing engineer — reliability and attribution first, speed second.
+      </p>
+      <div class="tag-row">
+        <span class="tag">Landing Pages</span>
+        <span class="tag">CRM Integration</span>
+        <span class="tag">Event Tracking</span>
+        <span class="tag">Lead Routing</span>
+        <span class="tag">Automation</span>
+        <span class="tag">A/B Infrastructure</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Catalyst ── -->
+  <div class="agent-card catalyst">
+    <div class="agent-header">
+      <div class="agent-icon">📈</div>
+      <div>
+        <div class="agent-name">Catalyst</div>
+        <div class="agent-role">Funnel Optimisation Agent</div>
+      </div>
+    </div>
+    <div class="agent-body">
+      <p>
+        Catalyst activates after launch. It reads performance data — CTR, CPL, conversion rates, CAC, engagement patterns — and turns numbers into decisions. Where are leads dropping off? What's draining budget without return? Which content type is outperforming everything else?
+      </p>
+      <p>
+        Critically, Catalyst closes the loop. Its findings feed back to Atlas when audience assumptions are wrong, to Echo when messaging is underperforming, to Foundry when creative formats need rethinking, and to Stack when tracking or conversion infrastructure is broken.
+      </p>
+      <div class="tag-row">
+        <span class="tag">Funnel Analysis</span>
+        <span class="tag">Bottleneck Diagnosis</span>
+        <span class="tag">Experiment Design</span>
+        <span class="tag">Attribution Review</span>
+        <span class="tag">KPI Reporting</span>
+        <span class="tag">Feedback Loops</span>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider" />
+
+  <!-- ── Worked example ── -->
+  <div class="example-box">
+    <h2>Pipeline in Action</h2>
+    <p class="sub">EXAMPLE · Facebook Page campaign for a service business</p>
+
+    <div class="example-step atlas">
+      <div class="ex-dot atlas">A</div>
+      <div class="ex-content">
+        <h4>Atlas — Understand the audience</h4>
+        <p>Given the brief: "grow a Facebook Page for a local bookkeeping firm and generate leads from small business owners." Atlas researches audience segments, maps common pain points (cash flow anxiety, tax deadlines, fear of being caught out), scans competitor page activity, and identifies which content themes typically drive engagement in this niche.</p>
+        <div class="ex-output">
+          → Audience: SMB owners, 35–55, 1–10 employees, revenue-conscious<br />
+          → Top pain points: tax deadlines, late invoices, unclear cash position<br />
+          → Content opportunities: myth-busting, deadline reminders, "what your numbers mean" education<br />
+          → Lead magnet angle: "5 bookkeeping mistakes costing small businesses money"
+        </div>
+      </div>
+    </div>
+
+    <div class="example-step echo">
+      <div class="ex-dot echo">E</div>
+      <div class="ex-content">
+        <h4>Echo — Build the messaging framework</h4>
+        <p>Working from Atlas's research, Echo defines the page voice (calm authority, not salesy), builds three message pillars, writes a CTA library, and produces hook variants for educational and promotional posts.</p>
+        <div class="ex-output">
+          → Voice: "your numbers, made simple" — clear, reassuring, no jargon<br />
+          → Pillar 1: Education (what the numbers mean)<br />
+          → Pillar 2: Peace of mind (we handle it, you focus on growth)<br />
+          → Pillar 3: Social proof (real client outcomes)<br />
+          → Hero hook: "Most small businesses overpay tax. Here's why."<br />
+          → Lead magnet CTA: "Get the free checklist →"
+        </div>
+      </div>
+    </div>
+
+    <div class="example-step foundry">
+      <div class="ex-dot foundry">F</div>
+      <div class="ex-content">
+        <h4>Foundry — Create two weeks of content</h4>
+        <p>Using Echo's messaging architecture, Foundry produces a two-week publishing calendar: 10 posts across the five content buckets, caption variants for A/B testing, a promo post for the lead magnet, and community engagement prompts.</p>
+        <div class="ex-output">
+          → 4 educational posts (myth-busting, explainer format)<br />
+          → 2 trust posts (behind-the-scenes, credentials)<br />
+          → 2 engagement posts (polls, questions)<br />
+          → 1 testimonial post<br />
+          → 1 promotional post (lead magnet offer)<br />
+          → 2 caption variants per post for testing
+        </div>
+      </div>
+    </div>
+
+    <div class="example-step stack">
+      <div class="ex-dot stack">S</div>
+      <div class="ex-content">
+        <h4>Stack — Wire up the lead capture funnel</h4>
+        <p>Foundry's lead magnet promo links to a landing page. Stack builds the page structure, defines the form fields, maps leads into the CRM, sets up UTM parameters for Facebook attribution, configures the follow-up automation, and writes the QA checklist before go-live.</p>
+        <div class="ex-output">
+          → Landing page: headline / 3 bullets / single-field email form<br />
+          → UTM: utm_source=facebook&utm_campaign=bookkeeping-checklist<br />
+          → CRM field mapping: email, source, lead_date, campaign_name<br />
+          → Automation: welcome email + 3-day nurture sequence triggered on form submit<br />
+          → QA: form submit → CRM entry → welcome email — all confirmed ✓
+        </div>
+      </div>
+    </div>
+
+    <div class="example-step catalyst">
+      <div class="ex-dot catalyst">C</div>
+      <div class="ex-content">
+        <h4>Catalyst — Measure, diagnose, improve</h4>
+        <p>After two weeks live, Catalyst reviews page reach, post engagement by type, landing page conversion rate, lead quality in CRM, and email open rates. It identifies what's working, what isn't, and produces a prioritised test backlog for the next cycle.</p>
+        <div class="ex-output">
+          → Best performing: myth-busting educational posts (3× avg reach)<br />
+          → Underperforming: behind-the-scenes posts (low saves, low CTR)<br />
+          → Funnel finding: landing page converting at 18% — strong, maintain copy<br />
+          → Bottleneck: 60% email open rate drops to 12% by day 3 of nurture<br />
+          → Next test: rewrite day-3 email subject line (send to Echo)<br />
+          → Atlas feedback: add "seasonal tax deadline" content pillar
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Triggering the Pipeline</h2>
+  <p>
+    The pipeline can be kicked off with a single instruction to the Orchestrator — the agent that coordinates all five specialists and manages handoffs between them. A typical trigger looks like this:
+  </p>
+
+  <div class="command-box">
+    <span class="comment"># Example pipeline trigger</span><br />
+    <span class="prompt">You → Orchestrator</span><br /><br />
+    <span class="cmd">Run the full pipeline for a Facebook Page campaign.<br />
+    Business: local bookkeeping firm targeting small business owners.<br />
+    Goal: grow page following and capture leads with a free tax checklist.<br />
+    Start with Atlas and work through to Foundry. Flag if you need anything<br />
+    before Stack and Catalyst can activate.</span>
+  </div>
+
+  <p>
+    The Orchestrator routes the brief to Atlas, collects structured outputs at each stage, passes them forward with clear handoff summaries, and flags any blockers before moving to the next agent. You can watch the whole pipeline run through Mission Control, or let it complete autonomously and review the final outputs.
+  </p>
+
+  <h2>What Each Agent Hands Off</h2>
+  <p>Structured handoffs are what separate a real pipeline from a series of disconnected prompts. Each agent produces outputs in a format the next agent can immediately use:</p>
+  <ul>
+    <li><strong>Atlas → Echo:</strong> Audience profile, pain point matrix, content opportunity map, recommended angles</li>
+    <li><strong>Echo → Foundry:</strong> Messaging framework, pillars, hook library, CTA library, persona variants</li>
+    <li><strong>Foundry → Stack:</strong> Asset requirements, landing page copy structure, CTA destinations, tracking requirements</li>
+    <li><strong>Stack → Catalyst:</strong> Live URLs, tracking confirmation, CRM mapping, attribution notes</li>
+    <li><strong>Catalyst → Upstream:</strong> Performance diagnosis, test recommendations, feedback to Atlas, Echo, Foundry, or Stack as appropriate</li>
+  </ul>
+
+  <p>
+    No agent invents what the previous stage should have provided. If a handoff is incomplete, the receiving agent flags what's missing rather than guessing. That discipline keeps the whole system reliable across multiple campaign cycles.
+  </p>
+
+  <!-- ── CTA ── -->
+  <div class="article-cta">
+    <h2>Manage the whole pipeline from your phone</h2>
+    <p>OpsPocket gives you a live view of every agent, every task, and every session — right from your iPhone. See Atlas researching, Foundry producing, Catalyst reporting. Mission Control shows it all.</p>
+    <a href="https://apps.apple.com/app/opspocket" class="btn btn-primary" style="margin-right: 12px;">Download OpsPocket →</a>
+    <a href="../index.html#pricing" class="btn-outline">View Pricing</a>
+  </div>
+
+</article>
+
+<footer>
+  <p>© 2025 OpsPocket · <a href="../index.html">Back to opspocket.com</a> · Built for engineers who don't stop.</p>
+</footer>
+
+</body>
+</html>
