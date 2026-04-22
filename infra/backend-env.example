@@ -19,7 +19,7 @@ CLOUDFLARE_TOKEN_FILE=/etc/opspocket/cloudflare-token
 # DNS + infra.
 CLOUDFLARE_ZONE_ID=9cd83123fb461ff560ac8f5566bfb96b
 DOMAIN_ROOT=opspocket.com
-SSH_KEY_NAME=findgriff-macbook
+SSH_KEY_NAME=findgriff@Craigs-MacBook-Pro.local
 DEFAULT_LOCATION=nbg1
 
 # Ops.

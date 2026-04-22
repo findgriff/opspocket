@@ -28,6 +28,7 @@ import http.server
 import json
 import logging
 import os
+import re
 import pathlib
 import secrets
 import socketserver
@@ -610,7 +611,7 @@ def provision_tenant(tenant: dict) -> None:
         "product": "opspocket",
         "tier": tier,
         "tenant_id": tenant_id,
-        "customer_email": email.replace("@", "_at_"),  # label values restricted
+        "customer_email": re.sub(r"[^A-Za-z0-9_.-]", "_", email)[:63].strip("._-"),  # Hetzner label char restrictions
     }
     server = hz_create_server(
         name=hostname, server_type=server_type, location=DEFAULT_LOCATION,
