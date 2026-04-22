@@ -34,6 +34,14 @@ String mcDuration(int? startMs, int? endMs) {
   return '${d.inHours}h ${d.inMinutes % 60}m';
 }
 
+int? _asInt(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is double) return v.toInt();
+  if (v is String) return int.tryParse(v);
+  return null;
+}
+
 // ── McTask ─────────────────────────────────────────────────────────────────────
 
 class McTask {
@@ -72,9 +80,9 @@ class McTask {
         label: j['label']?.toString(),
         agentId: (j['agentId'] ?? j['agent_id'])?.toString(),
         error: j['error']?.toString(),
-        createdAt: (j['createdAt'] ?? j['created_at']) as int?,
-        startedAt: (j['startedAt'] ?? j['started_at']) as int?,
-        endedAt: (j['endedAt'] ?? j['ended_at']) as int?,
+        createdAt: _asInt(j['createdAt'] ?? j['created_at']),
+        startedAt: _asInt(j['startedAt'] ?? j['started_at']),
+        endedAt: _asInt(j['endedAt'] ?? j['ended_at']),
       );
 
   static List<McTask> parseList(String raw) {
@@ -287,8 +295,8 @@ class McMemoryEntry {
         id: j['id']?.toString() ?? '',
         path: j['path']?.toString(),
         source: j['source']?.toString(),
-        startLine: (j['startLine'] ?? j['start_line']) as int?,
-        endLine: (j['endLine'] ?? j['end_line']) as int?,
+        startLine: _asInt(j['startLine'] ?? j['start_line']),
+        endLine: _asInt(j['endLine'] ?? j['end_line']),
         text: j['text']?.toString() ?? '',
         updatedAt: (j['updatedAt'] ?? j['updated_at'])?.toString(),
       );
