@@ -1,0 +1,37 @@
+{
+  "hostname": "opspocket-dev",
+  "public_ip": "178.104.242.211",
+  "server_type": "cx43",
+  "spec": "8 vCPU / 16 GB RAM / 160 GB SSD",
+  "location": "nbg1",
+  "location_display": "Nuremberg, Germany",
+  "os": "Ubuntu 24.04",
+  "provisioned_at": "2026-04-21T21:20:00Z",
+  "provisioned_via": "Hetzner web UI + manual cloud-init fixes (original cloud-init had a bash-process-subst bug that failed on first run)",
+  "role": "dev workshop + production host for opspocket.com + 6 migrated customer sites",
+  "hosts": [
+    "opspocket.com",
+    "www.opspocket.com",
+    "darleyabbeyfc.com",
+    "www.darleyabbeyfc.com",
+    "forms.darleyabbeyfc.com",
+    "forms.aressentinel.com",
+    "glowpower.co.uk",
+    "www.glowpower.co.uk",
+    "magichairstyler.com",
+    "www.magichairstyler.com",
+    "vantabiolabs.xyz",
+    "www.vantabiolabs.xyz",
+    "hello.dev.opspocket.com",
+    "*.dev.opspocket.com"
+  ],
+  "access": {
+    "ssh_shortcut": "ssh dev (from findgriff's Mac; key-based, id_ed25519)",
+    "root_key": "/root/.ssh/id_ed25519 on Mac; pubkey also installed on old DO droplet for cross-admin"
+  },
+  "secrets_location_on_box": {
+    "cloudflare_token": "/etc/caddy/cloudflare.env",
+    "forms_db_root_pw": "/root/forms-db-root.txt (mode 0600)",
+    "migration_artifacts": "/root/migration-artifacts/ (keep 7 days for rollback; delete after ~2026-04-29)"
+  }
+}

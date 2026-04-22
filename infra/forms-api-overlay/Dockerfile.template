@@ -1,0 +1,32 @@
+# forms-api overlay image template.
+#
+# Background: the original `dokku/forms-api:latest` image bakes the old Dokku
+# app env into `/app/.profile.d/01-app-env.sh`. Herokuish sources that file
+# AFTER Docker environment variables, so `docker run --env-file ...` values
+# get overridden on the way in. Specifically, DATABASE_URL from the old
+# Dokku MariaDB hostname keeps leaking through.
+#
+# Fix: thin overlay that rewrites the baked env script with the new values
+# before the app starts.
+#
+# Build using `infra/forms-api-overlay/build.sh` — it reads values from a
+# `.env` file (which is gitignored) and substitutes them into this template
+# to produce a real Dockerfile, then builds the image.
+#
+# DO NOT hand-edit the baked values here; keep secrets in `.env` outside git.
+FROM dokku/forms-api:latest
+USER root
+RUN cat > /app/.profile.d/01-app-env.sh <<ENVEOF
+export ALLOWED_ORIGINS='__ALLOWED_ORIGINS__'
+export DATABASE_URL='__DATABASE_URL__'
+export FORM_API_KEY='__FORM_API_KEY__'
+export NOTIFY_FROM='__NOTIFY_FROM__'
+export NOTIFY_TO='__NOTIFY_TO__'
+export SMTP_HOST='__SMTP_HOST__'
+export SMTP_PASS='__SMTP_PASS__'
+export SMTP_PORT='__SMTP_PORT__'
+export SMTP_SECURE='__SMTP_SECURE__'
+export SMTP_USER='__SMTP_USER__'
+ENVEOF
+RUN chown herokuishuser:herokuishuser /app/.profile.d/01-app-env.sh
+USER herokuishuser
