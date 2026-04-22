@@ -289,11 +289,18 @@ def build_cloud_init(*, hostname: str, domain: str, gateway_token: str,
     if model_provider == "openai" and openai_key:
         env_lines.append(f"OPENAI_API_KEY='{openai_key}'")
     env_str = " \\\n      ".join(env_lines)
+    devbox_pubkey = ""
+    try:
+        with open("/root/.ssh/id_ed25519.pub") as f:
+            devbox_pubkey = f.read().strip()
+    except Exception:
+        pass
+    auth_keys_block = f"ssh_authorized_keys:\n  - {devbox_pubkey}\n" if devbox_pubkey else ""
     return f"""#cloud-config
 hostname: {hostname}
 manage_etc_hosts: true
 package_update: true
-runcmd:
+{auth_keys_block}runcmd:
   - |
     set -eux
     mkdir -p /var/log/opspocket
