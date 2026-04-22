@@ -9,6 +9,47 @@ tenant with MCP behind auto-TLS, ready for the OpsPocket mobile app.
 |------|---------|
 | `install-openclaw.sh` | The actual installer. Run as root on a fresh box. Idempotent. |
 | `cloud-init.yaml` | Tenant bootstrap template the orchestrator fills in at signup time. |
+| `provision-tenant.sh` | Creates a customer VPS on Hetzner + writes `tenants.json`. |
+| `destroy-tenant.sh` | Tears down a tenant VPS + removes it from `tenants.json`. |
+| `test-installer.sh` | Dev-box Docker smoke-test for the installer. |
+
+## Destroying a tenant
+
+```bash
+# By tenant id (preferred — from tenants.json or the provisioning summary):
+./infra/destroy-tenant.sh --tenant-id a1b2c3d4
+
+# By customer email (looked up in tenants.json first, then Hetzner labels):
+./infra/destroy-tenant.sh --email customer@example.com
+
+# By raw Hetzner server id (last resort):
+./infra/destroy-tenant.sh --server-id 12345678
+
+# Non-interactive (for the future orchestrator):
+./infra/destroy-tenant.sh --tenant-id a1b2c3d4 --yes
+```
+
+The script:
+- requires `HETZNER_TOKEN` env var (or a saved token at `~/.opspocket/hetzner-token`),
+- prints what it's about to delete and prompts for `type 'destroy' to confirm`
+  (skip with `--yes`),
+- calls `DELETE /v1/servers/{id}` on the Hetzner API,
+- removes the matching record from `infra/tenants.json` (`jq` in place),
+- cleans up the local `~/.ssh/known_hosts` entry for the deleted IP.
+
+**DNS cleanup is manual.** Each customer's domain may live in a different
+DNS zone, so `destroy-tenant.sh` prints a `TODO (manual): remove DNS record for
+<domain>` at the end rather than guessing. Remove the A record yourself.
+
+## CI — `installer-ci.yml`
+
+GitHub Actions runs `install-openclaw.sh` inside an Ubuntu 24.04 Docker container
+on every PR and push to `main` that touches `infra/**`. The workflow is at
+`.github/workflows/installer-ci.yml` and uses the same verification pattern as
+`test-installer.sh`. Because CI has no reachable Ollama endpoint, the job runs
+with `MODEL_PROVIDER=ollama` + `SKIP_MODEL_HEALTHCHECK=1` so the installer
+skips the model-provider reachability probe but still exercises every other
+code path.
 
 ## Development loop
 

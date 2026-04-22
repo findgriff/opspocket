@@ -1,0 +1,126 @@
+name: installer-ci
+
+# Smoke-tests infra/install-openclaw.sh inside a throwaway Ubuntu 24.04
+# Docker container. Mirrors infra/test-installer.sh but runs on the
+# ubuntu-latest GitHub runner so we catch regressions on every PR.
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/installer-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/installer-ci.yml'
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start Ubuntu 24.04 container
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name installer-ci \
+            --privileged \
+            --cgroupns=host \
+            --tmpfs /run \
+            --tmpfs /run/lock \
+            -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            -v "${{ github.workspace }}:/workspace:ro" \
+            ubuntu:24.04 \
+            /bin/sleep infinity
+
+      - name: Bootstrap container (systemd + curl + sudo)
+        run: |
+          set -euo pipefail
+          docker exec installer-ci bash -c '
+            set -eux
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+              systemd systemd-sysv curl sudo ca-certificates jq iproute2 openssl
+            # Pretend we booted with systemd so services can start.
+            /lib/systemd/systemd --system &
+            sleep 3
+          '
+
+      - name: Copy installer into container
+        run: |
+          docker exec installer-ci bash -c 'mkdir -p /root'
+          docker cp infra/install-openclaw.sh installer-ci:/root/install-openclaw.sh
+          docker exec installer-ci chmod +x /root/install-openclaw.sh
+
+      - name: Run install-openclaw.sh
+        id: install
+        run: |
+          set -euo pipefail
+          RUN_ID=$(date +%s | tail -c 6)
+          TEST_DOMAIN="ci-${RUN_ID}.ci.opspocket.test"
+          TEST_PASSWORD="testpass-${RUN_ID}"
+          TEST_TOKEN=$(openssl rand -hex 16)
+          # OLLAMA_HOST points at an unreachable address on purpose; the
+          # SKIP_MODEL_HEALTHCHECK flag short-circuits the reachability probe
+          # so we still exercise the rest of the installer code path.
+          set +e
+          docker exec \
+            -e DOMAIN="$TEST_DOMAIN" \
+            -e MODEL_PROVIDER=ollama \
+            -e OLLAMA_HOST="http://invalid.ci.local:11434" \
+            -e SKIP_MODEL_HEALTHCHECK=1 \
+            -e CLAWMINE_PASSWORD="$TEST_PASSWORD" \
+            -e GATEWAY_TOKEN="$TEST_TOKEN" \
+            -e SKIP_UFW=1 \
+            installer-ci \
+            /root/install-openclaw.sh
+          INSTALL_EXIT=$?
+          set -e
+          echo "install_exit=$INSTALL_EXIT" >> "$GITHUB_OUTPUT"
+          if [ "$INSTALL_EXIT" -ne 0 ]; then
+            echo "::error::installer exited $INSTALL_EXIT"
+            exit "$INSTALL_EXIT"
+          fi
+
+      - name: Verify install artefacts
+        run: |
+          set -euo pipefail
+          FAILURES=0
+
+          check() {
+            local label="$1"; local cmd="$2"
+            if docker exec installer-ci bash -c "$cmd" >/dev/null 2>&1; then
+              echo "ok   $label"
+            else
+              echo "FAIL $label"
+              FAILURES=$((FAILURES+1))
+            fi
+          }
+
+          check "node installed"              "command -v node"
+          check "openclaw binary installed"   "command -v openclaw"
+          check "caddy binary installed"      "command -v caddy"
+          check "openclaw.json exists"        "test -f /home/openclaw/.openclaw/openclaw.json"
+          check "gateway listening on 18789"  "ss -tln | grep -q ':18789'"
+          check "gateway responds on /health" "curl -sf http://127.0.0.1:18789/health -o /dev/null"
+
+          if [ "$FAILURES" -ne 0 ]; then
+            echo "::error::$FAILURES check(s) failed"
+            exit 1
+          fi
+          echo "All verification checks passed."
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs installer-ci || true
+          docker exec installer-ci bash -c 'journalctl --no-pager -n 200 || true' || true
+
+      - name: Clean up container
+        if: always()
+        run: docker rm -f installer-ci || true

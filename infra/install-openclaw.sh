@@ -160,7 +160,9 @@ fi
 # OLLAMA_HOST set   → use remote Ollama server (e.g. dev box), skip local install
 # OLLAMA_HOST unset → install Ollama locally on this box + pull the model
 if [[ "$MODEL_PROVIDER" == "ollama" ]]; then
-  if [[ -n "$OLLAMA_HOST" ]]; then
+  if [[ "${SKIP_MODEL_HEALTHCHECK:-0}" == "1" ]]; then
+    warn "SKIP_MODEL_HEALTHCHECK=1 — skipping Ollama reachability check (CI/test mode)"
+  elif [[ -n "$OLLAMA_HOST" ]]; then
     say "MODEL_PROVIDER=ollama with remote host ${OLLAMA_HOST} — skipping local install"
     curl -fsSL "${OLLAMA_HOST}/api/version" >/dev/null 2>&1 \
       || fail "Remote Ollama at ${OLLAMA_HOST} not reachable — check connectivity"
