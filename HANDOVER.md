@@ -1,289 +1,197 @@
 # OpsPocket — Project Handover
 
-**Last updated:** 2026-04-17  
-**App:** OpsPocket — mobile SSH/VPS management console (Flutter, iOS-first)  
-**Bundle ID:** co.opspocket.opspocket  
+**Last updated:** 2026-04-22
+**Bundle ID (app):** co.opspocket.opspocket
 **Flutter:** 3.41.7 / Dart 3.11.5
 
 ---
 
-## What This App Does
+## Project Overview
 
-OpsPocket lets a user connect to their VPS over SSH from iPhone and:
-- Run terminal commands
-- Use a slash-command palette with pre-built ops commands (systemd, Docker, PM2, tmux, OpenClaw)
-- (Planned) Open the OpenClaw web UI through an SSH tunnel directly from the phone
+OpsPocket is now two products under one brand:
 
----
+- **OpsPocket (App)** — Flutter iOS SSH/VPS console for managing VPS servers, bots and AI services (OpenClaw/Clawbot). Shipping.
+- **OpsPocket Cloud** — managed OpenClaw hosting on Hetzner. Waitlist-stage; marketing site live, auto-provisioning orchestrated by `infra/provision-tenant.sh`. Not yet billable.
 
-## Architecture Overview
-
-```
-lib/
-  app/           — router, theme, core utilities
-  features/
-    server_profiles/   — CRUD for saved SSH servers
-    ssh/               — SSH connection (dartssh2 behind SshClient interface)
-    terminal/          — interactive terminal screen
-    command_templates/ — slash-command palette + builtin templates
-    splash/            — logo splash screen (3s on launch)
-    tunnel/            — (PLANNED) ClawGate SSH tunnel to browser
-  shared/
-    database/   — Drift (SQLite) schema + DAOs
-    models/     — Freezed value types
-    providers/  — shared Riverpod providers
-    storage/    — flutter_secure_storage wrapper
-```
-
-Key libraries: `flutter_riverpod`, `dartssh2`, `drift`, `flutter_secure_storage`, `go_router`, `url_launcher` (pending).
+Both share the same repository. The iOS app is unchanged since 2026-04-17; all work this session has been on Cloud infra, the marketing site migration, and a 6-site consolidation off DigitalOcean.
 
 ---
 
-## All Changes Made (Session Log)
+## Architecture
 
-### 1. Platform Setup
-- Added iOS platform: `flutter create --platforms=ios .`
-- Added web platform: `flutter create --platforms=web .`
-- Downloaded iOS Simulator runtime (~8.39 GB via `xcodebuild -downloadPlatform iOS`)
-- Ran code generation: `dart run build_runner build --delete-conflicting-outputs`
+### iOS app stack (unchanged)
 
-### 2. SSH Password Storage
-**Problem:** App had no way to store or use a password — only key auth worked.
+- **State management:** Riverpod (`StateNotifierProvider.family` per server)
+- **Routing:** GoRouter (`lib/app/router/app_router.dart`)
+- **SSH:** `dartssh2`, accessed only via the `SshClient` interface (`lib/features/ssh/domain/ssh_client.dart`)
+- **Database:** Drift (SQLite) — regenerate with `dart run build_runner build --delete-conflicting-outputs`
+- **Secrets:** `flutter_secure_storage` (iOS Keychain) — see `lib/shared/storage/secure_storage.dart`
+- **Theme:** `lib/app/theme/app_theme.dart` — OpsClaw palette (red/black/cyan), JetBrains Mono throughout
+- **Feature modules** (`lib/features/`): `server_profiles`, `ssh`, `terminal`, `command_templates`, `splash`, `tunnel`, `mission_control`, `quick_actions`, `server_health`, `logs`, `files`, `audit`, `auth_security`, `settings`
 
-**Files changed:**
-- `lib/shared/storage/secure_storage.dart` — added `SecretKeys.sshPassword(id)` key
-- `lib/features/server_profiles/presentation/server_edit_screen.dart` — added password TextField; saves to Keychain on save
-- `lib/features/ssh/presentation/ssh_connection_notifier.dart` — reads password from Keychain before connecting, passes to `SshCredentials`
+### Cloud stack (new)
 
-### 3. Bug Fixes
-- **NoSuchMethodError on `.name`** (`server_detail_screen.dart`): `_MetaCard` used `dynamic` for server param. Fixed to `final ServerProfile server`.
-- **BoxConstraints infinite width crash**: `ElevatedButton` with `minimumSize: Size.fromHeight(52)` placed in `Row`. Fixed with `SizedBox(height: 44)`.
-- **RenderMetaData layout errors**: `SelectableText` inside `ListView`. Replaced with `Text`.
-- **New OpenClaw commands not appearing**: `seedBuiltinsIfEmpty()` only seeded on empty DB. Changed to always upsert all builtins.
+- **Host:** single Hetzner CX43 in Nuremberg, `opspocket-dev` at `178.104.242.211`. Currently doubles as developer workshop, production host for the marketing site and migrated legacy sites, and test harness for tenant provisioning.
+- **Provisioning:** `infra/install-openclaw.sh` — idempotent installer that brings up OpenClaw + Docker + Caddy + Cloudflare DNS-01 TLS on a bare Ubuntu 24.04 Hetzner VPS. Supports `MODEL_PROVIDER=ollama` for free-tier builds.
+- **Orchestration:** `infra/provision-tenant.sh` — manual-MVP onboarding. Creates a Hetzner VM, points a Cloudflare A record at it, runs the installer over SSH, writes tenant record to `infra/tenants.json`.
+- **Interactive first-run:** `infra/first-deploy.sh` — wizard around `provision-tenant.sh` for the very first Hetzner deploy.
+- **TLS:** Caddy with the Cloudflare DNS-01 plugin. Single `CLOUDFLARE_API_TOKEN` held in `/etc/caddy/cloudflare.env` on the dev box.
+- **Multi-site Caddy:** per-site configs in `/etc/caddy/Caddyfile.d/*.caddy`, source-of-truth at `infra/caddy-sites/`. Main `Caddyfile` just does `import Caddyfile.d/*.caddy`.
+- **Waitlist backend:** `infra/waitlist-server.py` (48-line Python HTTP service on 127.0.0.1:8091), systemd unit `infra/opspocket-waitlist.service`. Appends to `/var/lib/opspocket/waitlist.txt`.
+- **Test harness:** `infra/test-installer.sh` — smoke-test that drives `install-openclaw.sh` end-to-end on a disposable `*.dev.opspocket.com` subdomain.
 
-### 4. UI Theme — OpsClaw Palette
-**File:** `lib/app/theme/app_theme.dart` (complete rewrite)
+---
 
-| Token | Hex | Usage |
+## Sites currently served from the dev box
+
+All TLS via Let's Encrypt with Cloudflare DNS-01. Per-site Caddy configs at `infra/caddy-sites/`.
+
+| File | Hostnames | Backend | Purpose |
+|---|---|---|---|
+| `opspocket.caddy` | opspocket.com, www | static `/var/www/opspocket.com` + `/api/waitlist` → 127.0.0.1:8091 | Public marketing + Cloud waitlist |
+| `dev.caddy` | hello.dev.opspocket.com, *.dev.opspocket.com | respond | Dev-box health, test-tenant catch-all |
+| `dafc.caddy` | darleyabbeyfc.com, www | static `/var/www/darleyabbeyfc.com` | Darley Abbey FC |
+| `dafc-forms.caddy` | forms.darleyabbeyfc.com | 127.0.0.1:5102 | DAFC forms handler |
+| `forms-api.caddy` | forms.aressentinel.com | 127.0.0.1:5103 | Forms API + MariaDB |
+| `glowpower.caddy` | glowpower.co.uk, www | 127.0.0.1:5100 | Glow Power site |
+| `magichairstyler.caddy` | magichairstyler.com, www | static `/var/www/magichairstyler.com` | Magic Hair Styler |
+| `vantabiolabs.caddy` | vantabiolabs.xyz, www | 127.0.0.1:5101 | Vanta Bio Labs |
+
+Reverse-proxy port map and full details in `infra/caddy-sites/README.md`.
+
+---
+
+## What's live for Cloud
+
+### Marketing site
+
+- `https://opspocket.com` — hand-rolled `site-v2/index.html` (1700+ lines, preserved from the DO original). Added:
+  - Cloud link in the main nav
+  - "Managed Cloud" band between hero and ticker
+  - Extended schema.org `Offer` array covering Cloud tiers
+- `https://opspocket.com/cloud` — new `site-v2/cloud.html`, same visual language as the homepage: pricing grid with monthly/annual toggle, how-it-works, feature grid, competitor comparison, FAQ, waitlist modal
+- `https://opspocket.com/blog/*` — 4 original posts preserved verbatim (mission-control, getting-started-ssh, marketing-pipeline, the-bridge)
+- `POST /api/waitlist` — writes to `/var/lib/opspocket/waitlist.txt` on the dev box
+
+### Pricing tiers (GBP; not yet billable)
+
+| Tier | Monthly | Annual | App bundled? | Hetzner type |
+|---|---|---|---|---|
+| Starter | £15.99/mo | £176.59/yr (~£14.72/mo) | ✓ free with annual only | CPX22 (2 vCPU / 4 GB / 80 GB) |
+| Pro | £22.99/mo | £234.50/yr (15% off) | ✓ always | CPX32 (4 vCPU / 8 GB / 80 GB) |
+| Agency | £34.99/mo | £356.90/yr (15% off) | ✓ always | CPX42 (8 vCPU / 16 GB / 160 GB) |
+
+Full rationale and design: `docs/superpowers/specs/2026-04-22-opspocket-site-migration-design.md`.
+
+---
+
+## Testing infrastructure
+
+### `infra/test-installer.sh`
+
+Smoke-tests `install-openclaw.sh` end-to-end:
+
+1. Spawns a throwaway Hetzner VM
+2. Allocates a test subdomain under `*.dev.opspocket.com`
+3. SSHes in and runs the installer
+4. Verifies OpenClaw gateway responds on the tenant URL
+5. Destroys the VM
+
+Use before merging any installer change. It is the only way to catch regressions in the installer short of real tenant provisioning.
+
+```bash
+./infra/test-installer.sh
+```
+
+---
+
+## All changes since 2026-04-17
+
+Chronological, newest last:
+
+1. **`3e374f7` Update all logos to OpsPocket official branding** — replaced placeholder logos app-wide.
+2. **`be51dfe` Replace OpenClaw UI tunnel logo with new OpsPocket branding** — updated the tunnel screen asset.
+3. **`7af0c33` feat(site+infra): landing site + managed-VPS installer scaffold** — first cut of the Next.js landing site and the `install-openclaw.sh` scaffold.
+4. **`7547c6f` feat(infra): nginx config + one-shot deploy script for the landing site** — initial deploy path (since superseded by Caddy).
+5. **`76be5ee` feat(infra): vps-build-site.sh — pull + build on the VPS itself** — pull/build helper on target VPS.
+6. **`ad9f9b0` chore(infra): build site from main (now that landing-site is merged)** — aligned build branch.
+7. **`9b0af49` fix(infra): handle branch switch when VPS checkout was previously on landing-site** — resilience for re-deploys.
+8. **`dead9d5` chore(infra): capture Vultr Marketplace OpenClaw install blueprint** — reference material under `infra/vultr-recce/`.
+9. **`3b3468d` chore(infra): capture OpenClaw-generated installer script + review** — baseline for rewriting the installer.
+10. **`78a0414` fix(infra): install-openclaw.sh — all 8 bugs from REVIEW.md fixed** — hardening pass on the installer.
+11. **`06f5187` feat(infra): provision-tenant.sh — manual onboarding MVP** — single-command tenant provisioning.
+12. **`42bbc15` feat(infra): first-deploy.sh — interactive wizard for first Hetzner deploy** — guided first-run.
+13. **`1846645` feat(infra): install-openclaw.sh — add MODEL_PROVIDER=ollama for free-tier deploys** — lets Starter tier run local Ollama instead of paid OpenAI.
+14. **`73c4cc0` feat(infra): dev box + installer fixes from Hetzner dry-run** — fixes discovered during the first live Hetzner run.
+15. **`5d1378a` docs(spec): opspocket.com migration + Cloud pricing design** — design doc for this session's work.
+16. **`403b6b7` feat(site): migrate opspocket.com to dev box + add Cloud pricing page** — swung the marketing site onto the dev box, added `/cloud`.
+17. **`925aabe` feat(infra): migrate 6 sites off DigitalOcean Dokku → Hetzner dev box** — six-site parallel cutover. Details in `infra/MIGRATION-LOG.md`.
+
+---
+
+## Known issues
+
+- **`www.magichairstyler.com` → root redirect** — `infra/caddy-sites/magichairstyler.caddy` has the standard `redir https://magichairstyler.com{uri} permanent` block, identical to the pattern used for `opspocket.com` and `glowpower.co.uk`. Users have reported the redirect not firing on some paths. Suspect a Cloudflare edge cache of an earlier failing response; purge `www.magichairstyler.com/*` at the CF edge and re-test. If that doesn't fix it, compare headers against `www.glowpower.co.uk` which uses the same pattern successfully.
+
+---
+
+## Outstanding work
+
+### Cloud (to go from waitlist → sellable)
+
+- **Stripe integration** — Checkout sessions for all three tiers, monthly + annual.
+- **Customer welcome email template** — transactional email on signup + on provisioning-complete.
+- **Signup orchestrator** — auto-run `provision-tenant.sh` on Stripe `checkout.session.completed` webhook; wire in failure/retry logic.
+- **Customer account dashboard** — `opspocket.com/account`: login, tier, billing, VPS status, basic ops (reboot, re-provision, download creds).
+- **SaaS admin panel** — founder-only view of tenants, revenue, live boxes, logs.
+- **Destroy DigitalOcean droplet** — `188.166.150.21` is still alive as emergency rollback for the 6-site migration. Kill once the dev box has run cleanly for a few more days.
+
+### App
+
+- **Mission Control** — iPhone polish pass + MCP wiring for OpenClaw 2026.4.5. Status unchanged from 2026-04-17.
+- **ClawGate** — SSH-tunnel UI to the OpenClaw browser UI. Spec at `docs/superpowers/specs/2026-04-17-clawgate-design.md`; not implemented. Status unchanged from 2026-04-17.
+
+---
+
+## Credentials & secrets on the dev box
+
+Everything secret lives on `opspocket-dev` and nowhere in the repo. Locations:
+
+| Secret | Path on dev box | Notes |
 |---|---|---|
-| `_red` | `#FF3B1F` | Buttons, accents |
-| `_deepRed` | `#B81200` | Danger, depth |
-| `_cyan` | `#00E6FF` | Connected state, tech accent |
-| `_softRed` | `#FF6A4D` | Warnings, soft highlight |
-| `_black` | `#000000` | Background |
-| `_darkGray` | `#2A2A2A` | Cards, surfaces, inputs |
-| `_lightText` | `#E6E6E6` | Primary text |
-| `_muted` | `#8A93A1` | Secondary text |
-
-### 5. JetBrains Mono Font
-- Downloaded `JetBrainsMono-Regular.ttf` and `JetBrainsMono-Bold.ttf` → `assets/fonts/`
-- Registered in `pubspec.yaml`
-- `AppTheme.mono()` updated to use `fontFamily: 'JetBrainsMono'`, height 1.45, letterSpacing 0.3
-
-### 6. Logo Splash Screen
-- Copied `OpsPoket.png` → `assets/logo.png`
-- Created `lib/features/splash/presentation/logo_splash_screen.dart` — black background, fade-in animation (600ms), 3-second hold, then navigates to main app
-- `lib/app/router/app_router.dart` — added `/splash` route as `initialLocation`
-
-### 7. Terminal Screen — Premium Redesign
-**File:** `lib/features/terminal/presentation/terminal_screen.dart` (complete rewrite)
-
-Key changes:
-- Local palette: pure white output text (`#FFFFFF`), `#888888` muted
-- JetBrains Mono throughout
-- macOS-style traffic-light dots in AppBar (red/orange/cyan)
-- `_EntryBlock`: left colour border, command line with `❯` prompt, timestamp, duration, exit code badge
-- `_StatusBar`: pulsing dot showing SSH state, tap to reconnect
-- Input bar: `❯` / `○` prompt symbol, borderless TextField, bolt (palette) + send (red glow) buttons
-- Inline `/` suggestion dropdown via `Overlay` + `CompositedTransformTarget`/`CompositedTransformFollower`
-
-### 8. OpenClaw CLI Commands
-- `lib/shared/models/command_template.dart` — added `openclaw` to `CommandCategory` enum
-- `lib/features/command_templates/data/builtin_templates.dart` — added 23 OpenClaw commands:
-  - Gateway: status, start, restart, stop
-  - Diagnostics: status, doctor, logs, logs --follow
-  - Channels, cron (list/add/remove), skills (list/install)
-  - Agents, tasks, models, config, backup, update
-  - Systemd: status, restart, logs (journalctl)
-- `lib/features/command_templates/presentation/slash_palette.dart` — added `'OpenClaw'` label for the category
-- `lib/features/command_templates/data/command_template_repository_impl.dart` — `seedBuiltinsIfEmpty()` now always upserts all builtins (idempotent, stable IDs)
-
-### 9. App Icon
-- Generated all 15 required iOS icon sizes from `assets/logo.png` using `sips` (macOS built-in)
-- Output to `ios/Runner/Assets.xcassets/AppIcon.appiconset/`
-- Must uninstall app from simulator first to clear icon cache: `xcrun simctl uninstall <device> co.opspocket.opspocket`
+| Hetzner API token | `/root/.hetzner-token` (mode 0600) | Used by `provision-tenant.sh` and `test-installer.sh` |
+| Cloudflare API token (Caddy DNS-01) | `/etc/caddy/cloudflare.env` | `systemctl restart caddy` after changing — reload does NOT re-read `EnvironmentFile` |
+| Cloudflare API token (provisioner, DNS writes) | `/root/.cloudflare-token` (mode 0600) | Used by `provision-tenant.sh` to create tenant A records |
+| forms-db MariaDB root password | `/root/forms-db-root.txt` (mode 0600) | Used by forms-api container; rotate with `ALTER USER` inside the container |
+| Tenant registry | `/root/tenants.json` + `infra/tenants.json` locally | Written by `provision-tenant.sh` on every successful run |
+| Per-tenant credentials | `/root/CREDENTIALS.json` on each tenant VPS | Written by `install-openclaw.sh`; authoritative copy lives on the tenant box |
+| Migration artifacts (rollback bundle) | `/root/migration-artifacts/` | ~2 GB; delete after 7 days of stable dev-box operation |
 
 ---
 
-## Feature: ClawGate (SSH Tunnel to Browser)
+## Access
 
-**Status:** Built and shipping (Clawbot + Mission Control).  
-**Spec:** `docs/superpowers/specs/2026-04-17-clawgate-design.md`
-
-### What was built
-
-Adds a tunnel tile to the server detail screen supporting two destinations:
-
-**Clawbot (port 18789):**
-1. Runs `su - clawd -c '... openclaw dashboard --no-open'` over SSH and parses `#token=...` from stdout
-2. Binds a local `ServerSocket` on `127.0.0.1:0`
-3. Pipes TCP connections via SSH `direct-tcpip` to `127.0.0.1:18789` on VPS
-4. Opens in-app WKWebView (`ClawGateWebViewScreen`) at `http://127.0.0.1:PORT/#token=TOKEN`
-
-**Mission Control (Nginx port 80 → /mission-control):**
-1. No token fetch — goes straight to tunnel setup
-2. Same ServerSocket + direct-tcpip pipe to port 80
-3. Opens animated loading screen (`MissionControlScreen`) then reveals WKWebView at `http://127.0.0.1:PORT/mission-control`
-
-**Key implementation note:** iOS `SFSafariViewController` and external Safari both suspend the Dart isolate, killing the tunnel. `webview_flutter` (WKWebView) runs in-process and works correctly. The `_acceptLoop` is started *before* setting state to active to avoid a race condition where the WebView connects before the accept loop is ready.
-
-### Files added/changed
-
-| File | Change |
-|---|---|
-| `lib/features/ssh/domain/ssh_forward_channel.dart` | NEW — `SshForwardChannel` type (stream + sink) hiding dartssh2 |
-| `lib/features/ssh/domain/ssh_client.dart` | Added `forwardChannel(host, port)` abstract method |
-| `lib/features/ssh/data/ssh_client_impl.dart` | Implemented `forwardChannel` via `dartssh2` `forwardLocal()` |
-| `lib/features/tunnel/domain/claw_gate_state.dart` | NEW — `ClawGateStatus`, `TunnelTarget` enums + `ClawGateState` |
-| `lib/features/tunnel/presentation/claw_gate_notifier.dart` | NEW — `ClawGateNotifier` (StateNotifier) + `clawGateProvider` |
-| `lib/features/tunnel/presentation/claw_gate_webview_screen.dart` | NEW — in-app WKWebView for Clawbot |
-| `lib/features/tunnel/presentation/mission_control_screen.dart` | NEW — animated loading screen + WKWebView for Mission Control |
-| `lib/features/server_profiles/presentation/server_detail_screen.dart` | Added `_ClawGateTile`, `_DestinationButtons`, `_TabButtons`; routes to correct screen per target |
-| `assets/mission_control_logo.png` | NEW — Mission Control logo asset |
-| `pubspec.yaml` | Added `url_launcher`, `webview_flutter`; registered `mission_control_logo.png` asset |
-
-### Mission Control animation screen details
-`mission_control_screen.dart` — three animation controllers:
-- `_orbitCtrl` (2400ms, repeat) — rotates a 270° sweep-gradient arc around the logo
-- `_pulseCtrl` (1600ms, repeat) — three concentric red rings pulsing outward with phase offsets 0/0.33/0.66
-- `_revealCtrl` (600ms, one-shot) — crossfades loading overlay → WebView when `onPageFinished` fires
-
-Status messages cycle every 1.4s while loading: "Establishing SSH tunnel…", "Handshaking with VPS…", "Routing to Mission Control…", "Loading interface…"
-
-### Splash screen updates
-- Delay changed from 3s to 4s
-- Spin-on animation added: logo rotates in from 360° (easeOutCubic), scales up from 0.65 (easeOutBack), fades in
-- iOS `LaunchScreen.storyboard` background changed from white to black (no white flash before splash)
-
----
-
-## Feature: One-Tap Mission Control Deploy
-
-**Status:** Shipping.
-
-Adds a "Deploy Mission Control" tile to the server detail screen that runs 7 sequential SSH steps to install/update the Next.js Mission Control web app on the VPS.
-
-### Steps executed
-0. **Check VPS** — `test -d /home/clawd/mission-control` — detects first-run vs update
-1. **Pull code** — first run: `git clone https://github.com/findgriff/mission-control.git`; update: `git fetch origin && git reset --hard origin/main` (handles divergent history)
-2. **npm install** — full install (TypeScript is a devDependency required for build)
-3. **npm run build** — 5-minute timeout
-4. **Start service** — `which pm2 || npm install -g pm2` then `pm2 restart` or `pm2 start`
-5. **pm2 save** — persists process list across reboots
-6. **Nginx** — idempotent shell script: skip if already on port 3001, update port if wrong, insert proxy block if missing
-
-### Files added/changed
-| File | Change |
-|---|---|
-| `lib/features/mission_control/domain/deploy_state.dart` | NEW — `DeployStep`, `DeployState`, `DeployStepStatus` |
-| `lib/features/mission_control/presentation/deploy_notifier.dart` | NEW — `DeployNotifier` + `deployProvider` |
-| `lib/features/mission_control/presentation/deploy_screen.dart` | NEW — animated step-by-step deploy UI with retry + copy output |
-| `lib/features/server_profiles/presentation/server_detail_screen.dart` | Added Deploy Mission Control tile |
-| `test/deploy_notifier_test.dart` | NEW — 5 unit tests, all passing |
-
-### Key constants
-```dart
-const _repo = 'https://github.com/findgriff/mission-control.git';
-const _dir  = '/home/clawd/mission-control';
-String _clawd(String cmd) =>
-    """su - clawd -c 'export PATH="\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH"; $cmd'""";
-```
-
----
-
-## Feature: OpenClaw UI Tunnel (Clawbot renamed)
-
-**Status:** Shipping. "Clawbot" destination renamed to "OpenClaw UI" throughout.
-
-### Changes from original ClawGate
-- **Token source fixed** — reads `gateway.auth.token` directly via Python from `~/.openclaw/openclaw.json` (no CLI subcommand, which doesn't exist in this version)
-- **New animated loading screen** — `lib/features/tunnel/presentation/openclaw_ui_screen.dart`: cyan pulsing rings + rotating arc + OpsPocket crab logo, identical structure to `MissionControlScreen`
-- **Deleted** `lib/features/tunnel/presentation/claw_gate_webview_screen.dart` (replaced)
-- **Asset added** — `assets/openclaw_ui_logo.png`
-- `lib/features/tunnel/domain/claw_gate_state.dart` — `TunnelTarget.clawbot` label changed to `'OpenClaw UI'`
-
----
-
-## Feature: Quick Actions (Premium Redesign)
-
-**Status:** Shipping. Quick Actions tile restored on server detail screen.
-
-### What's there
-9 default actions seeded on first run, 5 OpenClaw-specific ones upserted on every launch (stable IDs, no duplicates):
-
-| ID | Label | Template |
-|---|---|---|
-| `qa.status` | VPS Status | `builtin.generic.status` |
-| `qa.restart_service` | Restart service | `builtin.systemd.restart` |
-| `qa.pm2_restart` | PM2 restart | `builtin.pm2.restart` |
-| `qa.reboot` | Reboot server | `builtin.server.reboot` |
-| `qa.oc.gateway_restart` | OC Gateway restart | `builtin.openclaw.gateway-restart` |
-| `qa.oc.gateway_status` | OC Gateway status | `builtin.openclaw.gateway-status` |
-| `qa.oc.pm2_mc` | Mission Control PM2 | `builtin.pm2.list` |
-| `qa.oc.nginx_restart` | Nginx restart | `builtin.nginx.restart` |
-| `qa.oc.doctor` | OpenClaw doctor | `builtin.openclaw.doctor` |
-
-### Design
-- Dark `#111111` cards, icon in colour-coded rounded container
-- Icon mapped from `templateId` via `_metaByTemplate` lookup in `quick_actions_screen.dart`
-- Category chip (`OPENCLAW`, `PM2`, `NGINX`, `DANGER`, etc.) below label
-- Animated press (scale 0.95 + colour glow)
-- Output sheet: dark bottom sheet, monospace output, copy button
-
-### New builtin templates added
-- `builtin.nginx.restart` — `sudo systemctl restart nginx && sudo systemctl status nginx --no-pager`
-- `builtin.nginx.status` — `sudo systemctl status nginx --no-pager`
-
----
-
-## Screen inventory (server detail)
-
-Current tiles shown on `/servers/:id`:
-1. **Connection banner** — SSH status indicator
-2. **Server meta card** — host, user, auth method, tags
-3. **Quick Actions** → `/servers/:id/quick-actions`
-4. **Terminal** → `/servers/:id/terminal`
-5. **Deploy Mission Control** → `DeployScreen` (fullscreen dialog)
-6. **Tunnel (ClawGate)** — inline tile with OpenClaw UI + Mission Control pills
-7. **SSH connect/disconnect** buttons
-
-Intentionally hidden (commented out, not deleted): Logs, native Mission Control screen (use Tunnel → Mission for live data instead).
-
----
-
-## Key Environment Notes
-
-- SSH connects via `dartssh2` behind a `SshClient` interface (`lib/features/ssh/domain/ssh_client.dart`)
-- Passwords stored in iOS Keychain via `flutter_secure_storage` (key: `ssh.pwd.<serverId>`)
-- Private keys stored in Keychain (key: `ssh.pk.<serverId>`)
-- Database: Drift SQLite at app documents path
-- State management: Riverpod (`StateNotifierProvider.family` for per-server providers)
+- **SSH:** `ssh dev` from the Mac (key-based; alias in `~/.ssh/config`)
+- **Dev box IP:** `178.104.242.211` (Hetzner CX43, Nuremberg)
+- **Main URLs:**
+  - `https://opspocket.com` — public marketing site
+  - `https://opspocket.com/cloud` — Cloud pricing + waitlist
+  - `https://hello.dev.opspocket.com` — dev-box health check
+  - `https://*.dev.opspocket.com` — test-tenant catch-all
 
 ---
 
 ## Running the App
 
 ```bash
-# Install dependencies
+# Install deps + regenerate code
 flutter pub get
-
-# Regenerate code (if models changed)
 dart run build_runner build --delete-conflicting-outputs
 
 # Run on simulator
 flutter run -d "iPhone 16"
 
-# To clear icon cache after icon changes:
+# Clear icon cache after icon changes
 xcrun simctl uninstall booted co.opspocket.opspocket
 flutter run
 ```
