@@ -1,0 +1,14 @@
+# ── Private monitoring: status.opspocket.com (Uptime Kuma) ─────────
+# Basic auth gated. Upstream is Uptime Kuma on 127.0.0.1:3001.
+# Password generated with `caddy hash-password --plaintext "<pw>"`.
+status.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	basic_auth {
+		monitor $2a$14$tyJ9j6nDG0w5YDm6e3BNMOeYeJSYtVRqQX040ghddoMUQfNm7Imuu
+	}
+
+	reverse_proxy 127.0.0.1:3001
+}

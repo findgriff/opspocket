@@ -1,0 +1,25 @@
+# Uptime Kuma — self-hosted uptime monitor for OpsPocket production sites.
+# Runs on the dev box (178.104.242.211). Fronted by Caddy at
+# https://status.opspocket.com (basic auth gated).
+#
+# Deploy:
+#   sudo mkdir -p /var/lib/opspocket/uptime-kuma-data
+#   docker compose -f /opt/opspocket/monitoring/docker-compose.yml up -d
+#
+# Or the equivalent `docker run` that is currently deployed:
+#   docker run -d \
+#     --name uptime-kuma \
+#     --restart unless-stopped \
+#     -p 127.0.0.1:3001:3001 \
+#     -v /var/lib/opspocket/uptime-kuma-data:/app/data \
+#     louislam/uptime-kuma:1
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      # Loopback only — Caddy reverse-proxies from the public edge.
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - /var/lib/opspocket/uptime-kuma-data:/app/data
