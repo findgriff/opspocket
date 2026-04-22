@@ -1,0 +1,32 @@
+# /etc/opspocket/backend.env — systemd EnvironmentFile for opspocket-backend.
+# Copy to /etc/opspocket/backend.env on the dev box, chmod 0600, chown root:root.
+# Secrets themselves live in their own files (referenced below) so they can
+# have stricter permissions and be rotated independently.
+
+# Bind address / port (Caddy reverse-proxies opspocket.com/api/stripe-webhook here).
+BIND_HOST=127.0.0.1
+BIND_PORT=8092
+
+# DB path.
+OPSPOCKET_DB=/var/lib/opspocket/tenants.db
+
+# Secret files (one secret per file, mode 0600).
+STRIPE_WEBHOOK_SECRET_FILE=/etc/opspocket/stripe-webhook-secret
+STRIPE_API_KEY_FILE=/etc/opspocket/stripe-api-key
+HETZNER_TOKEN_FILE=/etc/opspocket/hetzner-token
+CLOUDFLARE_TOKEN_FILE=/etc/opspocket/cloudflare-token
+
+# DNS + infra.
+CLOUDFLARE_ZONE_ID=9cd83123fb461ff560ac8f5566bfb96b
+DOMAIN_ROOT=opspocket.com
+SSH_KEY_NAME=findgriff-macbook
+DEFAULT_LOCATION=nbg1
+
+# Ops.
+SUPPORT_EMAIL=hello@opspocket.com
+OPS_ALERT_EMAIL=findgriff@gmail.com
+
+# Set to 1 to skip real Hetzner/Cloudflare calls (for smoke tests).
+ORCHESTRATOR_DRY_RUN=0
+
+LOG_LEVEL=INFO

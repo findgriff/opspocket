@@ -11,6 +11,12 @@ opspocket.com, www.opspocket.com {
 		reverse_proxy 127.0.0.1:8091
 	}
 
+	# OpsPocket Cloud backend — Stripe webhook + future orchestrator APIs.
+	# Service: opspocket-backend.service on 127.0.0.1:8092.
+	handle /api/stripe-webhook {
+		reverse_proxy 127.0.0.1:8092
+	}
+
 	root * /var/www/opspocket.com
 	try_files {path} {path}.html {path}/index.html
 	file_server

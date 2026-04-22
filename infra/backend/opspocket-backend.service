@@ -1,0 +1,23 @@
+[Unit]
+Description=OpsPocket Cloud backend (Stripe webhook + orchestrator)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/opspocket/backend.env
+ExecStart=/usr/bin/python3 /opt/opspocket/backend/app.py
+Restart=always
+RestartSec=3
+User=root
+Group=root
+# We need /var/lib/opspocket writable (db) and /etc/opspocket readable
+# (secrets). Everything else stays read-only.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/opspocket /var/log/opspocket /root/.ssh
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,35 @@
+OpsPocket Cloud — your tenant is live
+=====================================
+
+Hi {{customer_email}},
+
+Your {{tier}} OpsPocket Cloud tenant is provisioned and ready.
+
+CONTROL UI
+----------
+URL:      {{control_ui_url}}
+username: {{username}}
+password: {{password}}
+
+MCP ENDPOINT (for the iOS app)
+------------------------------
+endpoint: {{mcp_endpoint}}
+token:    {{mcp_token}}
+
+NEXT STEPS
+----------
+1. Sign in to the Control UI with the credentials above.
+2. Download the iOS app: https://opspocket.com/app
+3. Paste your MCP endpoint and token into the app to pair.
+
+BILLING
+-------
+Manage your subscription, card, or cancel at any time:
+  {{portal_url}}
+
+NEED HELP?
+----------
+Reply to this email or write to {{support_email}}.
+
+—
+OpsPocket Cloud · Managed OpenClaw on Hetzner · opspocket.com

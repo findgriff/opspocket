@@ -47,3 +47,4 @@ secrets/
 # Codegen output — regenerate with `flutter pub run build_runner build`.
 *.g.dart
 *.freezed.dart
+__pycache__/
