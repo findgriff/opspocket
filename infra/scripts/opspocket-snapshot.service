@@ -1,0 +1,24 @@
+[Unit]
+Description=OpsPocket — daily Hetzner snapshot
+Documentation=https://github.com/findgriff/opspocket/blob/main/infra/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Token lives in /etc/opspocket/hetzner-token (mode 0600, root-owned).
+# The script picks it up automatically when HETZNER_TOKEN is unset.
+ExecStart=/usr/local/bin/opspocket-snapshot.sh opspocket-dev
+# Reasonable defaults — can be overridden via /etc/opspocket/snapshot.env
+EnvironmentFile=-/etc/opspocket/snapshot.env
+Environment=SNAPSHOT_RETENTION_DAYS=7
+Environment=SNAPSHOT_LABEL_VALUE=daily
+# Hardening — the script only needs outbound HTTPS + the token file.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadOnlyPaths=/etc/opspocket
+# Log to journal; systemd captures stdout/stderr.
+StandardOutput=journal
+StandardError=journal

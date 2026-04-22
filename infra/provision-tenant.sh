@@ -233,6 +233,26 @@ for _ in $(seq 1 90); do
 done
 if [[ -n "$INSTALL_DONE" ]]; then
   ok "OpenClaw install complete."
+
+  # ── Post-install snapshot ───────────────────────────────────────────
+  # Bake a "known-good" rollback point before the customer touches
+  # anything. Best-effort: we don't want provisioning to fail because
+  # the snapshot API had a hiccup.
+  say "Creating post-install snapshot (best-effort)…"
+  SNAPSHOT_SCRIPT="$(dirname "$0")/scripts/hetzner-snapshot.sh"
+  SNAPSHOT_DESC="t-${TENANT_ID} post-install $(date -u +%FT%H:%M)"
+  if [[ -x "$SNAPSHOT_SCRIPT" ]]; then
+    if HETZNER_TOKEN="$HETZNER_TOKEN" \
+       SNAPSHOT_LABEL_VALUE="post-install" \
+       SNAPSHOT_PRUNE=0 \
+       "$SNAPSHOT_SCRIPT" "$SERVER_ID" --description "$SNAPSHOT_DESC"; then
+      ok "Post-install snapshot created."
+    else
+      warn "Snapshot failed — continuing without rollback image. Create one manually via Hetzner console."
+    fi
+  else
+    warn "Snapshot helper not executable at $SNAPSHOT_SCRIPT — skipping."
+  fi
 else
   warn "Install marker not found after 15 min — check: ssh root@$PUBLIC_IP 'cat /var/log/opspocket/install.log'"
 fi
