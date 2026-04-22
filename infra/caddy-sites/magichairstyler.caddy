@@ -1,0 +1,16 @@
+www.magichairstyler.com {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    redir https://magichairstyler.com{uri} permanent
+}
+
+magichairstyler.com {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    root * /var/www/magichairstyler.com
+    try_files {path} {path}.html {path}/index.html
+    file_server
+    encode zstd gzip
+}

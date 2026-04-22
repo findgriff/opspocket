@@ -1,0 +1,12 @@
+darleyabbeyfc.com, www.darleyabbeyfc.com {
+    @www host www.darleyabbeyfc.com
+    redir @www https://darleyabbeyfc.com{uri} 301
+
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+
+    root * /var/www/darleyabbeyfc.com
+    try_files {path} {path}.html {path}/index.html
+    file_server
+}

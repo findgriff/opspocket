@@ -1,0 +1,17 @@
+# ── Public site: opspocket.com ──────────────────────────────────────
+# Original hand-rolled HTML recovered from the DO droplet.
+opspocket.com, www.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	@www host www.opspocket.com
+	redir @www https://opspocket.com{uri} 301
+
+	handle /api/waitlist {
+		reverse_proxy 127.0.0.1:8091
+	}
+
+	root * /var/www/opspocket.com
+	try_files {path} {path}.html {path}/index.html
+	file_server
+}

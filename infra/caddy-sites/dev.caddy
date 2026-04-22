@@ -1,0 +1,17 @@
+# ── hello.dev.opspocket.com — health page ──────────────────────────
+hello.dev.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	respond "✓ Wildcard TLS works — dev box reachable at {host}" 200 {
+		close
+	}
+}
+
+# ── *.dev.opspocket.com — catch-all for test tenants ────────────────
+*.dev.opspocket.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	respond "No tenant configured at {host} yet" 404
+}
