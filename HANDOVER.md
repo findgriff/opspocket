@@ -197,8 +197,16 @@ Full health audit of everything built this session. Results:
 
 ### App
 
-- **Mission Control** — iPhone polish pass + MCP wiring for OpenClaw 2026.4.5. Status unchanged from 2026-04-17.
+- **Mission Control** — ✅ **MCP credential wiring landed 2026-04-22 (late).** Server profile edit screen now has a "Mission Control (OpenClaw)" section: optional OpenClaw host override (falls back to SSH host) + clawmine basic-auth password. Both stored in Keychain only; no DB migration. `mcBridgeUrlProvider` consults the override first, then falls back to SSH host. All 97 tests pass including 10 new ones covering URL derivation edge cases (bare host, full URL, `/mcp` idempotence, empty override fall-through, null when both absent) and auth header construction. App rebuilt in release mode + installed on iPhone 14 Pro Max (iOS 26.4.1) via `devicectl`. Remaining Mission Control UI polish (loading/error states, tab transitions, tool-call telemetry) is the next pass.
 - **ClawGate** — SSH-tunnel UI to the OpenClaw browser UI. Spec at `docs/superpowers/specs/2026-04-17-clawgate-design.md`; not implemented. Status unchanged from 2026-04-17.
+
+### Known iOS 26 wireless gotcha
+
+`flutter run --debug` over WiFi on iOS 26 hangs on a black screen — the built-in Dart VM service handshake is unreliable on wireless for debug builds. Two reliable paths:
+1. **Release builds** always work (no VM-service dependency).
+2. **Install via `xcrun devicectl device install app <path-to-Runner.app>`** — Apple's native installer bypasses Flutter's iOS install code entirely. Pair with `xcrun devicectl device process launch --device <udid> co.opspocket.opspocket` to launch remotely.
+
+For day-to-day dev with hot-reload, plug the iPhone in with a cable.
 
 ---
 

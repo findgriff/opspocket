@@ -86,4 +86,20 @@ class SecretKeys {
   static String sshKeyPassphrase(String id) => 'ssh.pass.$id';
   static String sshPassword(String id) => 'ssh.pwd.$id';
   static String providerToken(String id) => 'provider.token.$id';
+
+  // ── Mission Control (OpenClaw 2026.4.5 gateway) ──────────────────────
+  //
+  // OpenClaw is reached separately from SSH: via HTTPS basic-auth to
+  // Caddy on `/mcp`. It may live on a different host from SSH (e.g. SSH
+  // via raw IP, MCP via `claw.tenant.opspocket.com`).
+  //
+  // Host is optional — [mcBridgeUrlProvider] falls back to the SSH host
+  // when unset/empty. Password is the `clawmine` basic-auth password
+  // from `/root/CREDENTIALS.json` on the tenant box.
+  //
+  // The legacy top-level `clawmineSecretKey()` in mc_bridge_client.dart
+  // produces the same string as [clawminePassword] — kept there for
+  // existing consumers. This is the canonical form.
+  static String clawmineHost(String id) => 'clawmine.host.$id';
+  static String clawminePassword(String id) => 'clawmine.pwd.$id';
 }

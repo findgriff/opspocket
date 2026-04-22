@@ -8,8 +8,9 @@ import '../../../shared/models/server_profile.dart';
 import '../../../shared/storage/secure_storage.dart';
 import '../data/server_profile_repository_impl.dart';
 
-/// Add or edit a server profile. Private key body is stored in secure storage
-/// and referenced by secureStorageKey; it never touches the Drift DB.
+/// Add or edit a server profile. Private key body + Mission Control creds
+/// are stored in secure storage (Keychain); the Drift DB only holds
+/// references and non-secret fields.
 class ServerEditScreen extends ConsumerStatefulWidget {
   final String? serverId;
   const ServerEditScreen({super.key, this.serverId});
@@ -30,6 +31,12 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
   final _passphrase = TextEditingController();
   final _password = TextEditingController();
   final _providerResourceId = TextEditingController();
+
+  // Mission Control (OpenClaw gateway) — optional, stored in Keychain only.
+  final _mcHost = TextEditingController();
+  final _mcPassword = TextEditingController();
+  bool _mcHasStoredPassword = false;
+  bool _mcExpanded = false;
 
   SshAuthMethod _auth = SshAuthMethod.privateKey;
   ProviderType _provider = ProviderType.none;
@@ -67,6 +74,18 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
     _auth = p.authMethod;
     _provider = p.providerType;
     _providerResourceId.text = p.providerResourceId ?? '';
+
+    // Mission Control — hydrate from Keychain.
+    final storage = ref.read(secureStorageProvider);
+    final mcHost = await storage.read(key: SecretKeys.clawmineHost(p.id));
+    final mcPwd = await storage.read(key: SecretKeys.clawminePassword(p.id));
+    if (!mounted) return;
+    _mcHost.text = mcHost ?? '';
+    _mcHasStoredPassword = (mcPwd != null && mcPwd.isNotEmpty);
+    // Expand the section when the user has already configured it.
+    if (_mcHost.text.isNotEmpty || _mcHasStoredPassword) {
+      _mcExpanded = true;
+    }
     setState(() => _loading = false);
   }
 
@@ -82,6 +101,8 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
     _passphrase.dispose();
     _password.dispose();
     _providerResourceId.dispose();
+    _mcHost.dispose();
+    _mcPassword.dispose();
     super.dispose();
   }
 
@@ -224,6 +245,8 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
                   controller: _notes,
                   maxLines: 3,
                 ),
+                const SizedBox(height: 24),
+                _missionControlSection(),
                 const SizedBox(height: 20),
                 _label('Provider (optional)'),
                 DropdownButtonFormField<ProviderType>(
@@ -278,6 +301,101 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
         child: Text(text, style: TextStyle(color: AppTheme.muted, fontSize: 12)),
       );
 
+  /// Optional Mission Control (OpenClaw gateway) credentials.
+  ///
+  /// Decoupled from SSH: the MCP endpoint is often on a different hostname
+  /// (a TLS-enabled tenant domain) than the SSH host (which can be a raw
+  /// IP). Leaving the host field blank reuses the SSH host. Both fields
+  /// are stored in Keychain only — the Drift DB never sees them.
+  Widget _missionControlSection() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Theme(
+        // Strip ExpansionTile's default dividers so it looks at home in
+        // our form.
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: _mcExpanded,
+          onExpansionChanged: (v) => setState(() => _mcExpanded = v),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: Icon(Icons.memory, color: AppTheme.accent),
+          title: const Text('Mission Control (OpenClaw)'),
+          subtitle: Text(
+            _mcHasStoredPassword
+                ? 'Configured — tap to edit'
+                : 'Optional — enables MCP tool calls',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12),
+          ),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Used by Mission Control to speak JSON-RPC to the '
+                'OpenClaw 2026.4.5 gateway. Leave these blank if this '
+                'server is plain SSH.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _label('OpenClaw host (optional)'),
+            TextFormField(
+              controller: _mcHost,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                hintText: 'claw.tenant.opspocket.com  (defaults to SSH host)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            _label(_mcHasStoredPassword
+                ? 'clawmine password (stored — leave blank to keep)'
+                : 'clawmine password'),
+            TextFormField(
+              controller: _mcPassword,
+              obscureText: true,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                hintText: 'from /root/CREDENTIALS.json on the box',
+              ),
+            ),
+            if (_mcHasStoredPassword) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _saving ? null : _clearMissionControl,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                  label: const Text('Clear Mission Control'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _clearMissionControl() async {
+    final id = widget.serverId;
+    if (id == null) return;
+    final storage = ref.read(secureStorageProvider);
+    await storage.delete(key: SecretKeys.clawmineHost(id));
+    await storage.delete(key: SecretKeys.clawminePassword(id));
+    if (!mounted) return;
+    setState(() {
+      _mcHost.clear();
+      _mcPassword.clear();
+      _mcHasStoredPassword = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Mission Control credentials cleared')),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
@@ -305,6 +423,20 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
         if (_password.text.isNotEmpty) {
           await storage.write(key: SecretKeys.sshPassword(id), value: _password.text);
         }
+      }
+
+      // ── Mission Control (optional) ─────────────────────────────────────
+      // Write host/password when provided; blank host → delete override
+      // so the provider falls back to the SSH host next time.
+      final mcHost = _mcHost.text.trim();
+      if (mcHost.isEmpty) {
+        await storage.delete(key: SecretKeys.clawmineHost(id));
+      } else {
+        await storage.write(key: SecretKeys.clawmineHost(id), value: mcHost);
+      }
+      final mcPwd = _mcPassword.text;
+      if (mcPwd.isNotEmpty) {
+        await storage.write(key: SecretKeys.clawminePassword(id), value: mcPwd);
       }
 
       final now = DateTime.now();
@@ -364,7 +496,15 @@ class _ServerEditScreenState extends ConsumerState<ServerEditScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    await ref.read(serverProfileRepositoryProvider).delete(widget.serverId!);
+    final id = widget.serverId!;
+    final storage = ref.read(secureStorageProvider);
+    // Clear all per-server secrets so the profile delete is clean.
+    await storage.delete(key: SecretKeys.sshPrivateKey(id));
+    await storage.delete(key: SecretKeys.sshKeyPassphrase(id));
+    await storage.delete(key: SecretKeys.sshPassword(id));
+    await storage.delete(key: SecretKeys.clawmineHost(id));
+    await storage.delete(key: SecretKeys.clawminePassword(id));
+    await ref.read(serverProfileRepositoryProvider).delete(id);
     if (!mounted) return;
     context.go('/servers');
   }

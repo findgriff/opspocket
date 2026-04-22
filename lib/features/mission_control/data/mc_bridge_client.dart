@@ -303,18 +303,42 @@ String clawmineSecretKey(String serverId) => 'clawmine.pwd.$serverId';
 /// Fixed basic-auth username baked into `install-openclaw.sh`.
 const String clawmineUsername = 'clawmine';
 
-/// Derives the tenant MCP URL from the server's hostnameOrIp. Null if the
-/// profile is missing or empty. Always `https://` — the 2026.4.5 gateway is
-/// TLS-only (Caddy terminates TLS; plain HTTP is rejected).
+/// Derives the tenant MCP URL.
+///
+/// Order of precedence:
+///   1. Keychain override at [SecretKeys.clawmineHost] — the user explicitly
+///      set a Mission Control host in server setup (usually a public TLS
+///      domain like `claw.tenant.opspocket.com`, which is different from
+///      the SSH host when SSH uses a raw IP).
+///   2. Server profile's `hostnameOrIp` — the SSH host. Works when SSH and
+///      MCP share a domain with a TLS cert.
+///
+/// Returns null if neither is set. Always builds an `https://` URL — the
+/// 2026.4.5 gateway is TLS-only (Caddy terminates TLS; plain HTTP is
+/// rejected). The user may paste a full URL including scheme/path; we
+/// preserve the base and append `/mcp` if not already present.
 final mcBridgeUrlProvider =
     FutureProvider.family<Uri?, String>((ref, serverId) async {
-  final profile = await ref.watch(serverProfileByIdProvider(serverId).future);
-  final host = profile?.hostnameOrIp.trim();
+  final storage = ref.read(secureStorageProvider);
+  final override = (await storage.read(key: SecretKeys.clawmineHost(serverId)))
+      ?.trim();
+
+  String? host;
+  if (override != null && override.isNotEmpty) {
+    host = override;
+  } else {
+    final profile = await ref.watch(serverProfileByIdProvider(serverId).future);
+    host = profile?.hostnameOrIp.trim();
+  }
   if (host == null || host.isEmpty) return null;
+
   // Tolerate the user having pasted a full URL or a bare hostname.
   if (host.startsWith('http://') || host.startsWith('https://')) {
     final base = Uri.parse(host);
-    return base.replace(path: '${base.path.replaceAll(RegExp(r'/+$'), '')}/mcp');
+    final cleanPath = base.path.replaceAll(RegExp(r'/+$'), '');
+    // If they already ended in /mcp, don't double-append.
+    final finalPath = cleanPath.endsWith('/mcp') ? cleanPath : '$cleanPath/mcp';
+    return base.replace(path: finalPath);
   }
   return Uri.parse('https://$host/mcp');
 });
