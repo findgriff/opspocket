@@ -600,7 +600,7 @@
           <li class="muted">iOS app: add for £8.50/mo</li>
           <li class="muted">Support: community</li>
         </ul>
-        <button onclick="openWaitlist('Starter')" class="cta cta-outline">Join Waitlist</button>
+        <button onclick="buyTier('starter')" class="cta cta-outline">Get Started →</button>
       </div>
 
       <!-- Pro -->
@@ -620,7 +620,7 @@
           <li>Email support (24-48h)</li>
           <li>Priority bug fixes</li>
         </ul>
-        <button onclick="openWaitlist('Pro')" class="cta cta-primary">Join Waitlist →</button>
+        <button onclick="buyTier('pro')" class="cta cta-primary">Get Started →</button>
       </div>
 
       <!-- Agency -->
@@ -639,7 +639,7 @@
           <li>Dedicated onboarding session</li>
           <li>Custom domain + TLS</li>
         </ul>
-        <button onclick="openWaitlist('Agency')" class="cta cta-outline">Join Waitlist</button>
+        <button onclick="buyTier('agency')" class="cta cta-outline">Get Started →</button>
       </div>
     </div>
 
@@ -893,6 +893,55 @@
   document.querySelectorAll('[data-annual-only]').forEach(el => {
     el.style.visibility = 'hidden';
   });
+
+  // ── Stripe Payment Links (test mode) ────────────────────────────
+  // One URL per tier × billing period. Generated via Stripe API — see
+  // site-v2/_stripe-links.json for provenance. Replace when we switch
+  // test → live.
+  const STRIPE_LINKS = {
+    starter_monthly: 'https://buy.stripe.com/test_5kQ5kD97K1nM97dh0Ecs800',
+    starter_annual:  'https://buy.stripe.com/test_bJebJ15Vyeay5V1bGkcs801',
+    pro_monthly:     'https://buy.stripe.com/test_cNi6oH1Fi9Ui83939Ocs802',
+    pro_annual:      'https://buy.stripe.com/test_9B64gz97KeayerxcKocs803',
+    agency_monthly:  'https://buy.stripe.com/test_5kQ7sLbfSgiG2IP8u8cs804',
+    agency_annual:   'https://buy.stripe.com/test_bJe3cv2Jm3vU3MTdOscs805',
+  };
+
+  // Buy button — reads the current billing toggle + routes to the right link
+  function buyTier(tier) {
+    const annualActive = document.getElementById('tab-annual').classList.contains('active');
+    const key = `${tier}_${annualActive ? 'annual' : 'monthly'}`;
+    const url = STRIPE_LINKS[key];
+    if (!url) { alert('Unknown tier: ' + key); return; }
+    // open in current tab — Stripe Checkout returns us via after_completion redirect
+    window.location.href = url;
+  }
+
+  // Show a success banner if we came back from Stripe via ?paid=1
+  (function showPaidBanner() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('paid') !== '1') return;
+    const tier = params.get('tier') || 'your tier';
+    const banner = document.createElement('div');
+    banner.style.cssText = `
+      position:fixed;top:70px;left:50%;transform:translateX(-50%);
+      background:var(--card);border:1px solid var(--cyan);border-radius:14px;
+      padding:20px 28px;z-index:300;max-width:540px;width:calc(100% - 40px);
+      box-shadow:0 0 30px rgba(0,230,255,0.18);`;
+    banner.innerHTML = `
+      <div style="display:flex;gap:16px;align-items:flex-start;">
+        <div style="font-size:28px;color:var(--cyan);">✓</div>
+        <div style="flex:1;">
+          <strong style="font-size:16px;">Payment received</strong>
+          <p style="margin:6px 0 0 0;color:var(--muted);font-size:14px;">
+            Thanks — we're provisioning your ${tier.replace('_', ' ')} box now.
+            You'll get an email within 10 minutes with your URL + password.
+          </p>
+        </div>
+        <button onclick="this.closest('div').parentElement.remove()" style="background:none;color:var(--muted);font-size:20px;">×</button>
+      </div>`;
+    document.body.appendChild(banner);
+  })();
 
   // Waitlist modal
   function openWaitlist(tier) {
