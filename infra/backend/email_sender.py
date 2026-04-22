@@ -36,7 +36,8 @@ log = logging.getLogger("opspocket-email")
 
 RESEND_KEY_FILE = pathlib.Path("/etc/opspocket/email-resend-key")
 SMTP_CONF_FILE = pathlib.Path("/etc/opspocket/email-smtp.conf")
-DEFAULT_FROM = "OpsPocket <hello@opspocket.com>"
+DEFAULT_FROM = "OpsPocket <hello@mail.opspocket.com>"
+DEFAULT_REPLY_TO = "hello@opspocket.com"
 
 
 def _read_smtp_conf() -> Optional[dict]:
@@ -57,6 +58,7 @@ def _send_resend(key: str, to: str, subject: str, text: str, html: Optional[str]
         "from": DEFAULT_FROM,
         "to": [to],
         "subject": subject,
+        "reply_to": DEFAULT_REPLY_TO,
         "text": text,
     }
     if html:
@@ -67,6 +69,8 @@ def _send_resend(key: str, to: str, subject: str, text: str, html: Optional[str]
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
+            "User-Agent": "opspocket-backend/1.0",
+            "Accept": "application/json",
         },
         method="POST",
     )
