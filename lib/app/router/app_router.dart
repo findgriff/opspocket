@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/audit/presentation/audit_screen.dart';
 import '../../features/auth_security/presentation/splash_unlock_screen.dart';
+import '../../features/server_health/presentation/health_screen.dart';
 import '../../features/splash/presentation/logo_splash_screen.dart';
 import '../../features/command_templates/presentation/command_templates_screen.dart';
 import '../../features/logs/presentation/logs_screen.dart';
@@ -26,6 +27,7 @@ class Routes {
   static const terminal = '/servers/:id/terminal';
   static const quickActions = '/servers/:id/quick-actions';
   static const logs = '/servers/:id/logs';
+  static const health = '/servers/:id/health';
   static const templates = '/templates';
   static const audit = '/audit';
   static const settings = '/settings';
@@ -85,6 +87,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) {
                   final id = state.pathParameters['id']!;
                   return LogsScreen(serverId: id);
+                },
+              ),
+              GoRoute(
+                path: 'health',
+                builder: (context, state) {
+                  final id = state.pathParameters['id']!;
+                  return ServerHealthScreen(serverId: id);
                 },
               ),
             ],

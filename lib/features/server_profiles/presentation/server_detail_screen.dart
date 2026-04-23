@@ -6,16 +6,26 @@ import '../../../app/core/widgets/loading_empty_error.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../shared/models/server_profile.dart';
 import '../../../shared/models/session_state.dart';
+import '../../mission_control/presentation/deploy_screen.dart';
+import '../../server_health/presentation/health_tiles.dart';
 import '../../ssh/presentation/ssh_connection_notifier.dart';
 import '../../tunnel/domain/claw_gate_state.dart';
 import '../../tunnel/presentation/claw_gate_notifier.dart';
-// Native Mission Control screen was deleted on 2026-04-23. Mission
-// Control is now tunneled via ClawGate → WebView (same mechanism as
-// the OpenClaw UI). See _ClawGateTile below.
 import '../../tunnel/presentation/openclaw_ui_screen.dart';
 import '../../tunnel/presentation/mission_control_screen.dart';
 import '../data/server_profile_repository_impl.dart';
 
+/// Server detail screen — the main per-server hub.
+///
+/// Layout (matches the product-defining screenshot, 2026-04-23):
+///   1. SSH connection banner
+///   2. Server Health tiles (CPU / RAM / Disk / Uptime — live)
+///   3. Quick Actions tile
+///   4. Terminal tile
+///   5. Files (SFTP) tile
+///   6. Mission Control card (deploy + update)
+///   7. Tunnel row (OpenClaw UI + Mission destinations)
+///   8. SSH Connect / Disconnect buttons
 class ServerDetailScreen extends ConsumerWidget {
   final String serverId;
   const ServerDetailScreen({super.key, required this.serverId});
@@ -30,7 +40,7 @@ class ServerDetailScreen extends ConsumerWidget {
         title: serverAsync.when(
           loading: () => const Text('Server'),
           error: (_, __) => const Text('Server'),
-          data: (s) => Text(s?.nickname ?? 'Server'),
+          data: (s) => Text((s?.nickname ?? 'Server').toUpperCase()),
         ),
         actions: [
           IconButton(
@@ -50,13 +60,28 @@ class ServerDetailScreen extends ConsumerWidget {
               icon: Icons.error_outline,
             );
           }
+          final isConnected =
+              session.connectionState == SshConnectionState.connected;
+          final hostLabel = '${server.hostnameOrIp}:${server.port}';
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // 1. Connection banner
               _ConnectionBanner(state: session),
-              const SizedBox(height: 16),
-              _MetaCard(server: server),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+
+              // 2. Server Health (live tiles when connected, compact
+              //    host card when not)
+              if (isConnected)
+                ServerHealthTiles(
+                  serverId: serverId,
+                  hostLabel: hostLabel,
+                )
+              else
+                _MetaCard(server: server),
+              const SizedBox(height: 14),
+
+              // 3. Quick Actions
               _ActionTile(
                 icon: Icons.bolt_outlined,
                 label: 'Quick Actions',
@@ -64,25 +89,36 @@ class ServerDetailScreen extends ConsumerWidget {
                 onTap: () => context.push('/servers/$serverId/quick-actions'),
                 color: AppTheme.accent,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
+
+              // 4. Terminal
               _ActionTile(
                 icon: Icons.terminal_outlined,
                 label: 'Terminal',
                 subtitle: 'Run custom commands',
                 onTap: () => context.push('/servers/$serverId/terminal'),
               ),
-              const SizedBox(height: 12),
-              // _ActionTile(
-              //   icon: Icons.article_outlined,
-              //   label: 'Logs',
-              //   subtitle: 'Tail journald, Docker, PM2, files',
-              //   onTap: () => context.push('/servers/$serverId/logs'),
-              // Mission Control + OpenClaw UI: one tile, two destinations.
-              // Both tunnel to OpenClaw's server-side Control UI — no
-              // duplicate native Flutter reskin. Installed on every
-              // OpenClaw Cloud box by `install-openclaw.sh`.
+              const SizedBox(height: 10),
+
+              // 5. Files (SFTP) — WIP, re-enable when SftpSession is wired
+              // into SshClient. Removed from the tile list on 2026-04-23 so
+              // the release build compiles cleanly. Tracked for next pass.
+
+              // 6. Mission Control card (server-side dashboard deploy)
+              _MissionControlCard(
+                serverId: serverId,
+                serverName: server.nickname.isNotEmpty
+                    ? server.nickname
+                    : server.hostnameOrIp,
+              ),
+              const SizedBox(height: 10),
+
+              // 7. Tunnel row — OpenClaw UI + Mission destinations
               _ClawGateTile(serverId: serverId),
-              const SizedBox(height: 24),
+
+              const SizedBox(height: 22),
+
+              // 8. SSH connect / disconnect
               Text(
                 'SSH',
                 style: TextStyle(color: AppTheme.muted, fontSize: 12),
@@ -92,7 +128,9 @@ class ServerDetailScreen extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => ref.read(sshConnectionProvider(serverId).notifier).connect(),
+                      onPressed: () => ref
+                          .read(sshConnectionProvider(serverId).notifier)
+                          .connect(),
                       icon: const Icon(Icons.link),
                       label: const Text('Connect'),
                     ),
@@ -100,8 +138,11 @@ class ServerDetailScreen extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: () => ref.read(sshConnectionProvider(serverId).notifier).disconnect(),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),),
+                      onPressed: () => ref
+                          .read(sshConnectionProvider(serverId).notifier)
+                          .disconnect(),
                       icon: const Icon(Icons.link_off),
                       label: const Text('Disconnect'),
                     ),
@@ -115,6 +156,8 @@ class ServerDetailScreen extends ConsumerWidget {
     );
   }
 }
+
+// ── Connection banner ─────────────────────────────────────────────────────────
 
 class _ConnectionBanner extends StatelessWidget {
   final dynamic state;
@@ -158,7 +201,8 @@ class _ConnectionBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('SSH: $status', style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text('SSH: $status',
+                    style: const TextStyle(fontWeight: FontWeight.w600),),
                 if (state.lastError != null)
                   Text(
                     state.lastError!,
@@ -172,6 +216,8 @@ class _ConnectionBanner extends StatelessWidget {
     );
   }
 }
+
+// ── Compact meta card (pre-connection) ────────────────────────────────────────
 
 class _MetaCard extends StatelessWidget {
   final ServerProfile server;
@@ -189,9 +235,8 @@ class _MetaCard extends StatelessWidget {
             _row('User', server.username),
             _row('Auth', server.authMethod.name),
             if (server.tags.isNotEmpty) _row('Tags', server.tags.join(', ')),
-            if (server.notes != null && server.notes!.isNotEmpty) _row('Notes', server.notes!),
-            if (server.providerType.name != 'none')
-              _row('Provider', '${server.providerType.name} ${server.providerResourceId ?? ''}'),
+            if (server.notes != null && server.notes!.isNotEmpty)
+              _row('Notes', server.notes!),
           ],
         ),
       ),
@@ -203,12 +248,20 @@ class _MetaCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 80, child: Text(k, style: TextStyle(color: AppTheme.muted, fontSize: 12))),
-            Expanded(child: Text(v, style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
+            SizedBox(
+                width: 80,
+                child: Text(k,
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12),),),
+            Expanded(
+                child: Text(v,
+                    style:
+                        const TextStyle(fontFamily: 'monospace', fontSize: 13),),),
           ],
         ),
       );
 }
+
+// ── Generic action tile ───────────────────────────────────────────────────────
 
 class _ActionTile extends StatelessWidget {
   final IconData icon;
@@ -230,7 +283,8 @@ class _ActionTile extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: Icon(icon, color: c),
-        title: Text(label, style: TextStyle(color: c, fontWeight: FontWeight.w600)),
+        title: Text(label,
+            style: TextStyle(color: c, fontWeight: FontWeight.w600),),
         subtitle: subtitle != null ? Text(subtitle!) : null,
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
@@ -239,7 +293,93 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-// ── ClawGate tile ─────────────────────────────────────────────────────────────
+// ── Mission Control card ──────────────────────────────────────────────────────
+//
+// Purple-branded card with an Update button. Runs the deploy flow
+// (git pull + rebuild of the server-side Mission Control dashboard)
+// when tapped. For OpsPocket Cloud customers the install script has
+// already put Mission Control on the box; this card lets the operator
+// refresh it to the latest GitHub commit. For BYO-VPS users it's the
+// initial install path.
+class _MissionControlCard extends ConsumerWidget {
+  final String serverId;
+  final String serverName;
+  const _MissionControlCard({required this.serverId, required this.serverName});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const purple = Color(0xFFB57BFF);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            // Logo / icon slot
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: purple.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: purple.withValues(alpha: 0.35)),
+              ),
+              child: const Icon(Icons.crisis_alert, color: purple, size: 22),
+            ),
+            const SizedBox(width: 12),
+            // Title + subtitle
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Mission Control',
+                    style: TextStyle(
+                      color: purple,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Pull latest & rebuild from GitHub',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            // Update button
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: purple,
+                side: BorderSide(color: purple.withValues(alpha: 0.5)),
+                backgroundColor: purple.withValues(alpha: 0.08),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                minimumSize: const Size(0, 40),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DeployScreen(
+                      serverId: serverId,
+                      serverName: serverName,
+                    ),
+                    fullscreenDialog: true,
+                  ),
+                );
+              },
+              child: const Text('Update',
+                  style: TextStyle(fontWeight: FontWeight.w600),),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── ClawGate tunnel tile ──────────────────────────────────────────────────────
 
 class _ClawGateTile extends ConsumerWidget {
   final String serverId;
@@ -259,7 +399,6 @@ class _ClawGateTile extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header row ──────────────────────────────────────────────────
             Row(
               children: [
                 _statusDot(gate.status),
@@ -269,9 +408,7 @@ class _ClawGateTile extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        gate.isActive
-                            ? gate.activeTarget!.label
-                            : 'Tunnel',
+                        gate.isActive ? gate.activeTarget!.label : 'Tunnel',
                         style: TextStyle(
                           color: isConnected ? Colors.white : AppTheme.muted,
                           fontWeight: FontWeight.w600,
@@ -284,7 +421,6 @@ class _ClawGateTile extends ConsumerWidget {
                     ],
                   ),
                 ),
-                // ── Action buttons ──────────────────────────────────────────
                 if (gate.isActive)
                   _TabButtons(
                     onOpen: () {
@@ -293,10 +429,10 @@ class _ClawGateTile extends ConsumerWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                gate.activeTarget == TunnelTarget.missionControl
-                                    ? MissionControlScreen(url: url)
-                                    : OpenClawUiScreen(url: url),
+                            builder: (_) => gate.activeTarget ==
+                                    TunnelTarget.missionControl
+                                ? MissionControlScreen(url: url)
+                                : OpenClawUiScreen(url: url),
                             fullscreenDialog: true,
                           ),
                         );
@@ -319,7 +455,6 @@ class _ClawGateTile extends ConsumerWidget {
                   ),
               ],
             ),
-            // ── Error message ────────────────────────────────────────────────
             if (gate.status == ClawGateStatus.error &&
                 gate.errorMessage != null) ...[
               const SizedBox(height: 8),
@@ -351,7 +486,6 @@ class _ClawGateTile extends ConsumerWidget {
                 ),
               ),
             ],
-            // ── Active port info ─────────────────────────────────────────────
             if (gate.isActive && gate.localPort != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -434,7 +568,8 @@ class _DestinationButtons extends StatelessWidget {
           label: 'Mission',
           icon: Icons.dashboard_outlined,
           color: const Color(0xFFB57BFF),
-          onTap: enabled ? () => onTap?.call(TunnelTarget.missionControl) : null,
+          onTap:
+              enabled ? () => onTap?.call(TunnelTarget.missionControl) : null,
         ),
       ],
     );
@@ -477,7 +612,7 @@ class _DestinationButtons extends StatelessWidget {
   }
 }
 
-// ── Open / Stop tab buttons (active state) ────────────────────────────────────
+// ── Open / Stop tab buttons (active tunnel) ──────────────────────────────────
 
 class _TabButtons extends StatelessWidget {
   final VoidCallback onOpen;
