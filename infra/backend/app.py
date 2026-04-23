@@ -348,6 +348,17 @@ def ssh_check_install_complete(ip: str) -> bool:
 
 
 # ── Webhook handler ───────────────────────────────────────────────────
+def _background_stripe_sync_and_lifecycle(event: dict) -> None:
+    """Invoked in a daemon thread on every mutation webhook.
+    Refreshes local Stripe cache for the affected customer + dispatches
+    lifecycle emails. Never raises into the caller."""
+    try:
+        import lifecycle  # type: ignore
+        lifecycle.run(event)
+    except Exception as e:
+        log.exception("background sync/lifecycle failed: %s", e)
+
+
 class WebhookHandler(http.server.BaseHTTPRequestHandler):
     server_version = "OpsPocketBackend/1.0"
 
@@ -447,7 +458,8 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             elif etype == "customer.subscription.deleted":
                 handle_subscription_deleted(event)
             elif etype == "invoice.payment_failed":
-                log.warning("invoice.payment_failed: %s", event.get("data", {}).get("object", {}).get("id"))
+                log.warning("invoice.payment_failed: %s",
+                             event.get("data", {}).get("object", {}).get("id"))
             else:
                 log.info("ignoring event type: %s", etype)
         except Exception as e:
@@ -455,6 +467,16 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             # Return 500 so Stripe retries.
             self._reply(500, b'{"error":"handler error"}')
             return
+
+        # Auto-refresh local Stripe cache for any mutation event. Runs in
+        # a background thread so the webhook response stays fast (<100 ms).
+        # Stripe retries failed webhooks, so we can't afford slow handlers.
+        if etype.startswith(("customer.", "invoice.", "charge.",
+                              "checkout.session.", "subscription_schedule.")):
+            threading.Thread(
+                target=_background_stripe_sync_and_lifecycle,
+                args=(event,), daemon=True,
+            ).start()
 
         self._reply(200, b'{"ok":true}')
         # Wake the worker without blocking this response.

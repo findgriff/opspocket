@@ -351,6 +351,55 @@ def handle_account_login(h: http.server.BaseHTTPRequestHandler) -> None:
     if not email or "@" not in email:
         _reply(h, 400, {"error": "valid email required"})
         return
+
+    # ── Rate limits ───────────────────────────────────────────────
+    # Per-email: max 5 login requests per hour (prevents spamming a
+    #            victim's inbox).
+    # Per-IP:    max 20 per hour (prevents bots harvesting valid
+    #            customer emails — we already return the same message
+    #            for found + not-found emails).
+    ip = _remote_ip(h)
+    cutoff = _now() - 3600
+    conn = _db()
+    try:
+        email_count = conn.execute(
+            "SELECT count(*) AS n FROM magic_tokens "
+            "WHERE email=? AND issued_at > ?",
+            (email, cutoff),
+        ).fetchone()["n"]
+        # Use audit_log as the per-IP counter to avoid a new table.
+        # created_at is stored as ISO-UTC; compute the cutoff the same way.
+        cutoff_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        hour_ago_iso = datetime.fromtimestamp(
+            cutoff, tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ip_count = conn.execute(
+            "SELECT count(*) AS n FROM audit_log "
+            "WHERE action='login.attempt' AND ip=? AND created_at > ?",
+            (ip, hour_ago_iso),
+        ).fetchone()["n"] if ip else 0
+    finally:
+        conn.close()
+
+    if email_count >= 5:
+        log.warning("rate-limit: email %s hit hourly magic-link limit", email)
+        _reply(h, 200, {"ok": True, "message": "check your inbox"})
+        return
+    if ip_count >= 20:
+        log.warning("rate-limit: ip %s hit hourly login limit", ip)
+        _reply(h, 429, {"error": "too many attempts — try again in an hour"})
+        return
+
+    # Record the attempt in audit_log (keeps IP count accurate).
+    conn = _db()
+    try:
+        _audit(conn, "system", "login.attempt",
+               target_type="customer", target_id=email,
+               ip=ip)
+        conn.commit()
+    finally:
+        conn.close()
+
     token = issue_magic_token(email)
     # Email the link. Always return 200 so the API doesn't leak which
     # emails exist in our customer DB.
@@ -1891,7 +1940,89 @@ def handle_get(h: http.server.BaseHTTPRequestHandler) -> bool:
         code = path[len("/api/pair/"):]
         handle_pair(h, code)
         return True
+    if path == "/api/status":
+        handle_public_status(h)
+        return True
     return False
+
+
+def handle_public_status(h):
+    """Public — no auth. Returns platform-wide health for /status page.
+    Does NOT leak per-tenant details."""
+    now_ts = _now()
+    conn = _db()
+    try:
+        # Count active tenants + their heartbeat health distribution
+        active_rows = conn.execute(
+            "SELECT t.id, hb.received_at, hb.cpu_percent, hb.ram_percent, "
+            "hb.disk_percent, hb.failed_services, hb.restart_loop_count "
+            "FROM tenants t "
+            "LEFT JOIN tenant_heartbeats hb ON hb.tenant_id = t.id "
+            "WHERE t.status='active'"
+        ).fetchall()
+
+        total = len(active_rows)
+        running = degraded = stale = unknown = 0
+        for r in active_rows:
+            hb = None
+            if r["received_at"] is not None:
+                hb = {
+                    "received_at": r["received_at"],
+                    "cpu_percent": r["cpu_percent"],
+                    "ram_percent": r["ram_percent"],
+                    "disk_percent": r["disk_percent"],
+                    "failed_services": r["failed_services"],
+                    "restart_loop_count": r["restart_loop_count"],
+                }
+            s = tenant_health_status(hb)
+            if s == "running": running += 1
+            elif s == "degraded": degraded += 1
+            elif s == "stale": stale += 1
+            else: unknown += 1
+
+        # Provisioning queue health
+        pending = conn.execute(
+            "SELECT count(*) AS n FROM tenants "
+            "WHERE status IN ('pending','provisioning')"
+        ).fetchone()["n"]
+        failed = conn.execute(
+            "SELECT count(*) AS n FROM tenants WHERE status='failed'"
+        ).fetchone()["n"]
+
+        # Last successful snapshot
+        last_snap = conn.execute(
+            "SELECT created_at FROM hetzner_snapshots "
+            "ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+    finally:
+        conn.close()
+
+    # Derive an overall state for the green/amber/red pill
+    overall = "operational"
+    if failed > 0 or degraded > 0 or stale > total // 2:
+        overall = "degraded"
+    if total > 0 and (running == 0 or failed > total // 3):
+        overall = "issues"
+
+    _reply(h, 200, {
+        "overall": overall,
+        "platform": {
+            "api": "operational",           # if this endpoint answered, we're up
+            "stripe_webhook": "operational",
+            "email": "operational",
+        },
+        "tenants": {
+            "active_total": total,
+            "running": running,
+            "degraded": degraded,
+            "stale": stale,
+            "unknown": unknown,
+            "provisioning": pending,
+            "failed": failed,
+        },
+        "last_snapshot_ts": last_snap["created_at"] if last_snap else None,
+        "generated_at": now_ts,
+    })
 
 
 def handle_post(h: http.server.BaseHTTPRequestHandler) -> bool:

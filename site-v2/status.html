@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpsPocket · System Status</title>
+<meta name="description" content="Live OpsPocket Cloud platform status.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0A0A0B;--panel:#141416;--panel-2:#1C1C1F;--border:#25252A;
+      --fg:#F5F5F7;--muted:#9AA0A6;--red:#FF3B1F;--cyan:#00E6FF;
+      --green:#4CAF50;--amber:#FFB800}
+html,body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh;line-height:1.5}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+.nav{border-bottom:1px solid var(--border);padding:16px 24px}
+.nav-inner{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+.brand{font-weight:800;display:flex;align-items:center;gap:8px;color:var(--fg)}
+.brand-dot{width:8px;height:8px;background:var(--red);border-radius:50%;box-shadow:0 0 12px var(--red)}
+.wrap{max-width:760px;margin:0 auto;padding:56px 24px 80px}
+h1{font-size:34px;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px}
+.sub{color:var(--muted);font-size:15px;margin-bottom:32px}
+.hero-pill{display:inline-flex;align-items:center;gap:14px;padding:18px 24px;background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:32px;width:100%}
+.hero-pill .dot{width:14px;height:14px;border-radius:50%;box-shadow:0 0 14px currentColor;flex-shrink:0}
+.hero-pill strong{font-size:18px;letter-spacing:0.01em}
+.op{--pc:var(--green);color:var(--green)}
+.deg{--pc:var(--amber);color:var(--amber)}
+.issues{--pc:var(--red);color:var(--red)}
+.op .dot,.deg .dot,.issues .dot{background:currentColor}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin:28px 0 10px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--panel);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.row .label{font-weight:600}
+.row .status{display:inline-flex;align-items:center;gap:8px;font-size:13px}
+.row .status .dot{width:8px;height:8px;border-radius:50%}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.stat-val{font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-val.green{color:var(--green)}.stat-val.amber{color:var(--amber)}.stat-val.red{color:var(--red)}
+.stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
+footer{max-width:760px;margin:64px auto 0;padding:24px;color:var(--muted);font-size:12px;text-align:center;border-top:1px solid var(--border)}
+.loading{color:var(--muted);padding:40px;text-align:center}
+.refresh-note{color:var(--muted);font-size:12px;margin-top:4px}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/"><span class="brand-dot"></span>OpsPocket</a>
+  <div style="font-size:13px;color:var(--muted)">Status</div>
+</div></nav>
+<main class="wrap">
+  <h1>System status</h1>
+  <p class="sub">Live platform health. Refreshes every 30 seconds.</p>
+  <div id="content"><div class="loading">Checking…</div></div>
+</main>
+<footer>
+  © <span id="yr">2026</span> OpsPocket ·
+  <a href="/">Home</a> · <a href="/cloud">Cloud</a> · <a href="/support">Support</a>
+</footer>
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+const statusDot = (s) => {
+  if (s === 'operational' || s === 'running') return '<span class="dot" style="background:var(--green)"></span>';
+  if (s === 'degraded' || s === 'stale') return '<span class="dot" style="background:var(--amber)"></span>';
+  return '<span class="dot" style="background:var(--red)"></span>';
+};
+const statusTxt = (s) => s === 'operational' ? 'Operational' : s.charAt(0).toUpperCase() + s.slice(1);
+async function load(){
+  let data = null;
+  try {
+    const r = await fetch('/api/status', {headers: {'Accept':'application/json'}});
+    data = await r.json();
+  } catch(_){}
+  const el = document.getElementById('content');
+  if (!data) {
+    el.innerHTML = `<div class="hero-pill issues">${statusDot('issues')}
+      <div><strong>Unable to reach status API</strong><div class="refresh-note">Status page itself is up; backend may be restarting.</div></div></div>`;
+    return;
+  }
+  const overallClass = data.overall === 'operational' ? 'op' : data.overall === 'degraded' ? 'deg' : 'issues';
+  const overallText = {
+    operational: 'All systems operational',
+    degraded:    'Some systems degraded',
+    issues:      'Service issues detected',
+  }[data.overall] || 'Status unknown';
+
+  const t = data.tenants || {};
+  el.innerHTML = `
+    <div class="hero-pill ${overallClass}">${statusDot(data.overall)}
+      <div>
+        <strong>${overallText}</strong>
+        <div class="refresh-note">Last checked ${new Date(data.generated_at * 1000).toLocaleString()}</div>
+      </div>
+    </div>
+
+    <h2>Platform components</h2>
+    <div class="row">
+      <span class="label">API (opspocket.com/api)</span>
+      <span class="status">${statusDot(data.platform.api)} ${statusTxt(data.platform.api)}</span>
+    </div>
+    <div class="row">
+      <span class="label">Stripe webhook</span>
+      <span class="status">${statusDot(data.platform.stripe_webhook)} ${statusTxt(data.platform.stripe_webhook)}</span>
+    </div>
+    <div class="row">
+      <span class="label">Email delivery (Resend)</span>
+      <span class="status">${statusDot(data.platform.email)} ${statusTxt(data.platform.email)}</span>
+    </div>
+
+    <h2>Customer VPS fleet</h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-val">${t.active_total ?? 0}</div><div class="stat-lbl">Active tenants</div></div>
+      <div class="stat"><div class="stat-val green">${t.running ?? 0}</div><div class="stat-lbl">Running</div></div>
+      <div class="stat"><div class="stat-val amber">${(t.degraded ?? 0) + (t.stale ?? 0)}</div><div class="stat-lbl">Degraded</div></div>
+      <div class="stat"><div class="stat-val amber">${t.provisioning ?? 0}</div><div class="stat-lbl">Provisioning</div></div>
+      <div class="stat"><div class="stat-val red">${t.failed ?? 0}</div><div class="stat-lbl">Failed</div></div>
+    </div>
+
+    <h2>Backups</h2>
+    <div class="row">
+      <span class="label">Last snapshot</span>
+      <span class="mono" style="color:var(--muted)">${data.last_snapshot_ts || '—'}</span>
+    </div>
+  `;
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

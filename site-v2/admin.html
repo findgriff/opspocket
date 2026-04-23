@@ -272,10 +272,35 @@ function renderHealthBlock(d,hb,hist){
       <div class="k">TLS cert days</div><div class="v" style="color:${(hb.tls_cert_days_left??30)<14?'var(--accent)':'var(--fg)'}">${esc(hb.tls_cert_days_left!=null?hb.tls_cert_days_left+'d':'—')}</div>
     </div>
   </div>`;
-  if(hist&&hist.length){
-    out+='<div class="card-meta">Last 24 h samples ('+hist.length+' points) — most recent first</div>';
+  if(hist&&hist.length>1){
+    out+=`<div class="card-meta" style="margin-top:14px">Last 24 h — ${hist.length} samples</div>`;
+    out+=renderSparkline(hist,'cpu_percent','#57e3ff','CPU');
+    out+=renderSparkline(hist,'ram_percent','#ffb800','RAM');
+    out+=renderSparkline(hist,'disk_percent','#b57bff','Disk');
   }
   return out;
+}
+// SVG sparkline — no Chart.js dep. hist = array of rows sorted ASC by ts.
+function renderSparkline(hist, key, colour, label){
+  const vals=hist.map(h=>h[key]).filter(v=>v!=null);
+  if(!vals.length)return '';
+  const W=680,H=40,P=4;
+  const min=0,max=100;
+  const n=vals.length;
+  const pts=vals.map((v,i)=>{
+    const x=P + (i/(n-1||1))*(W-2*P);
+    const y=H-P - ((v-min)/(max-min))*(H-2*P);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const last=vals[vals.length-1];
+  return `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+    <div style="width:50px;font-size:11px;color:var(--muted)">${label}</div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block" preserveAspectRatio="none">
+      <polyline fill="none" stroke="${colour}" stroke-width="1.5" points="${pts}"/>
+      <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+    </svg>
+    <div style="width:42px;font-size:11px;font-family:'JetBrains Mono',monospace;color:${colour};text-align:right">${last.toFixed(0)}%</div>
+  </div>`;
 }
 
 // Tabs

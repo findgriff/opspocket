@@ -58,6 +58,10 @@ opspocket.com, www.opspocket.com {
 	handle /api/tenants/* {
 		reverse_proxy 127.0.0.1:8092
 	}
+	# Public status JSON + /status page (no auth)
+	handle /api/status {
+		reverse_proxy 127.0.0.1:8092
+	}
 
 	# ── Static site ─────────────────────────────────────────────────
 	root * /var/www/opspocket.com
