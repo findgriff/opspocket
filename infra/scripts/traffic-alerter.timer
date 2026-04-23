@@ -1,0 +1,12 @@
+[Unit]
+Description=OpsPocket — daily Hetzner traffic overage alert
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=10m
+AccuracySec=5m
+Persistent=true
+Unit=traffic-alerter.service
+
+[Install]
+WantedBy=timers.target

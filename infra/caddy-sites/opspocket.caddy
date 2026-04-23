@@ -54,6 +54,10 @@ opspocket.com, www.opspocket.com {
 	handle /api/pair/* {
 		reverse_proxy 127.0.0.1:8092
 	}
+	# Tenant boxes post here every 60s with HMAC-signed telemetry
+	handle /api/tenants/* {
+		reverse_proxy 127.0.0.1:8092
+	}
 
 	# ── Static site ─────────────────────────────────────────────────
 	root * /var/www/opspocket.com

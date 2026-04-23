@@ -384,29 +384,85 @@ def handle_account_me(h: http.server.BaseHTTPRequestHandler) -> None:
     conn = _db()
     try:
         rows = conn.execute(
-            "SELECT id, tier, interval, domain, status, created_at, last_status_change "
-            "FROM tenants WHERE lower(customer_email)=? "
-            "ORDER BY created_at DESC",
+            "SELECT t.id, t.tier, t.interval, t.domain, t.status, "
+            "t.created_at, t.last_status_change, t.hetzner_server_id, "
+            "hz.server_type, hz.vcpus, hz.memory_gb, hz.disk_gb, "
+            "hz.datacenter, hz.ipv4, hz.status AS hz_status, "
+            "hb.received_at AS hb_received_at, "
+            "hb.cpu_percent, hb.ram_percent, hb.disk_percent, "
+            "hb.uptime_seconds, hb.openclaw_version, "
+            "hb.failed_services, hb.restart_loop_count "
+            "FROM tenants t "
+            "LEFT JOIN hetzner_servers hz ON hz.id = t.hetzner_server_id "
+            "LEFT JOIN tenant_heartbeats hb ON hb.tenant_id = t.id "
+            "WHERE lower(t.customer_email)=? "
+            "ORDER BY t.created_at DESC",
             (email,),
         ).fetchall()
+        # Active subscription + next renewal from Stripe cache
+        stripe_cust_ids = [r["id"] for r in conn.execute(
+            "SELECT DISTINCT stripe_customer_id AS id FROM tenants "
+            "WHERE lower(customer_email)=? AND stripe_customer_id IS NOT NULL",
+            (email,),
+        ).fetchall()]
+        sub_row = None
+        if stripe_cust_ids:
+            ph = ",".join("?" * len(stripe_cust_ids))
+            sub_row = conn.execute(
+                f"SELECT * FROM stripe_subscriptions "
+                f"WHERE customer_id IN ({ph}) "
+                f"AND status IN ('active','trialing','past_due') "
+                f"ORDER BY current_period_end DESC LIMIT 1",
+                stripe_cust_ids,
+            ).fetchone()
     finally:
         conn.close()
     tenants = []
     for r in rows:
-        t = dict(r)
-        # Don't leak credentials/tokens from the /me endpoint — those are
-        # fetched via /api/pair/:code only, which is single-use.
+        d = dict(r)
+        hb = None
+        if d.get("hb_received_at"):
+            hb = {
+                "received_at": d["hb_received_at"],
+                "cpu_percent": d.get("cpu_percent"),
+                "ram_percent": d.get("ram_percent"),
+                "disk_percent": d.get("disk_percent"),
+                "failed_services": d.get("failed_services"),
+                "restart_loop_count": d.get("restart_loop_count"),
+            }
+        health = tenant_health_status(hb)
         tenants.append({
-            "id": t["id"],
-            "tier": t["tier"],
-            "interval": t["interval"],
-            "domain": t["domain"],
-            "status": t["status"],
-            "url": f"https://{t['domain']}/" if t["domain"] else None,
-            "created_at": t["created_at"],
-            "last_status_change": t["last_status_change"],
+            "id": d["id"],
+            "tier": d["tier"],
+            "interval": d["interval"],
+            "domain": d["domain"],
+            "status": d["status"],
+            "url": f"https://{d['domain']}/" if d["domain"] else None,
+            "created_at": d["created_at"],
+            "last_status_change": d["last_status_change"],
+            "health_status": health,
+            "ipv4": d.get("ipv4"),
+            "server_type": d.get("server_type"),
+            "vcpus": d.get("vcpus"),
+            "memory_gb": d.get("memory_gb"),
+            "disk_gb": d.get("disk_gb"),
+            "datacenter": d.get("datacenter"),
+            "power_state": d.get("hz_status"),
+            "uptime_seconds": d.get("uptime_seconds"),
+            "openclaw_version": d.get("openclaw_version"),
+            "cpu_percent": d.get("cpu_percent"),
+            "ram_percent": d.get("ram_percent"),
+            "disk_percent": d.get("disk_percent"),
+            "last_seen_seconds_ago": (
+                _now() - d["hb_received_at"] if d.get("hb_received_at") else None
+            ),
         })
-    _reply(h, 200, {"email": email, "tenants": tenants})
+    sub = dict(sub_row) if sub_row else None
+    _reply(h, 200, {
+        "email": email,
+        "tenants": tenants,
+        "subscription": sub,
+    })
 
 
 def handle_account_portal(h: http.server.BaseHTTPRequestHandler) -> None:
@@ -618,16 +674,34 @@ def handle_admin_tenants(h: http.server.BaseHTTPRequestHandler) -> None:
     conn = _db()
     try:
         rows = conn.execute(
-            "SELECT id, customer_email, tier, interval, domain, hetzner_ip, "
-            "status, created_at, last_status_change, notes "
-            "FROM tenants ORDER BY created_at DESC"
+            "SELECT t.id, t.customer_email, t.tier, t.interval, t.domain, "
+            "t.hetzner_ip, t.status, t.created_at, t.last_status_change, "
+            "t.notes, "
+            "hb.received_at AS hb_received_at, "
+            "hb.cpu_percent AS hb_cpu, hb.ram_percent AS hb_ram, "
+            "hb.disk_percent AS hb_disk, hb.failed_services AS hb_failed "
+            "FROM tenants t "
+            "LEFT JOIN tenant_heartbeats hb ON hb.tenant_id = t.id "
+            "ORDER BY t.created_at DESC"
         ).fetchall()
     finally:
         conn.close()
-    _reply(h, 200, {
-        "count": len(rows),
-        "tenants": [dict(r) for r in rows],
-    })
+    out = []
+    for r in rows:
+        d = dict(r)
+        hb = {
+            "received_at": d.pop("hb_received_at"),
+            "cpu_percent": d.pop("hb_cpu"),
+            "ram_percent": d.pop("hb_ram"),
+            "disk_percent": d.pop("hb_disk"),
+            "failed_services": d.pop("hb_failed"),
+        } if d.get("hb_received_at") is not None else None
+        d["health_status"] = tenant_health_status(hb) if hb else "unknown"
+        d["last_seen_seconds_ago"] = (
+            _now() - hb["received_at"] if hb else None
+        )
+        out.append(d)
+    _reply(h, 200, {"count": len(out), "tenants": out})
 
 
 def handle_admin_waitlist(h: http.server.BaseHTTPRequestHandler) -> None:
@@ -769,8 +843,29 @@ def handle_admin_tenant_detail(h: http.server.BaseHTTPRequestHandler,
             "ORDER BY created_at DESC LIMIT 50",
             (tenant_id, tenant["customer_email"].lower()),
         ).fetchall()]
+        # Heartbeat (latest + 24h sparkline)
+        hb_row = conn.execute(
+            "SELECT * FROM tenant_heartbeats WHERE tenant_id=?", (tenant_id,),
+        ).fetchone()
+        hb = dict(hb_row) if hb_row else None
+        hb_history = [dict(r) for r in conn.execute(
+            "SELECT received_at, cpu_percent, ram_percent, disk_percent "
+            "FROM tenant_heartbeat_history "
+            "WHERE tenant_id=? AND received_at > ? "
+            "ORDER BY received_at ASC",
+            (tenant_id, _now() - 24 * 3600),
+        ).fetchall()]
+        traffic = None
+        if tenant.get("hetzner_server_id"):
+            tr = conn.execute(
+                "SELECT * FROM hetzner_traffic WHERE server_id=?",
+                (tenant["hetzner_server_id"],),
+            ).fetchone()
+            traffic = dict(tr) if tr else None
     finally:
         conn.close()
+    # Strip the per-tenant heartbeat_secret — never leak it.
+    tenant.pop("heartbeat_secret", None)
     _reply(h, 200, {
         "tenant": tenant,
         "customer": dict(cust_row) if cust_row else None,
@@ -780,6 +875,10 @@ def handle_admin_tenant_detail(h: http.server.BaseHTTPRequestHandler,
         "stripe_charges": chs,
         "hetzner_server": hz,
         "hetzner_snapshots": snaps,
+        "hetzner_traffic": traffic,
+        "heartbeat": hb,
+        "heartbeat_history": hb_history,
+        "health_status": tenant_health_status(hb),
         "notes": notes,
         "tasks": tasks,
         "feature_flags": flags,
@@ -1554,6 +1653,168 @@ def handle_pair(h: http.server.BaseHTTPRequestHandler, code: str) -> None:
     _reply(h, 200, payload)
 
 
+# ── Heartbeat receiver ───────────────────────────────────────────────
+#
+# Tenant boxes run a systemd timer that POSTs every 60 s to
+# /api/tenants/<id>/heartbeat with:
+#
+#   Headers:
+#     X-OpsPocket-Signature: sha256=<hex hmac of raw body using heartbeat_secret>
+#     Content-Type: application/json
+#
+#   Body:
+#     {"cpu":35.4,"ram":58.2,"disk":22,"uptime":1234567,
+#      "load":[0.3,0.5,0.6],"openclaw_version":"2026.4.5",
+#      "docker_total":4,"docker_running":4,
+#      "failed_services":0,"failed_service_names":[],
+#      "tls_days_left":84,"restart_loops":0}
+#
+# We verify HMAC, upsert tenant_heartbeats, append to history
+# (throttled to 5-min samples to keep the table small).
+
+import hashlib as _hashlib
+import hmac as _hmac
+
+HISTORY_SAMPLE_INTERVAL = 300  # write to history at most every 5 min
+
+
+def _read_raw_body(h: http.server.BaseHTTPRequestHandler) -> bytes:
+    length = int(h.headers.get("Content-Length", 0) or 0)
+    return h.rfile.read(length) if length else b""
+
+
+def handle_tenant_heartbeat(h: http.server.BaseHTTPRequestHandler,
+                            tenant_id: str) -> None:
+    raw = _read_raw_body(h)
+    sig_header = h.headers.get("X-OpsPocket-Signature", "")
+    if not sig_header.startswith("sha256="):
+        _reply(h, 400, {"error": "missing or malformed signature"})
+        return
+    provided = sig_header.split("=", 1)[1]
+
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT heartbeat_secret FROM tenants WHERE id=?", (tenant_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row["heartbeat_secret"]:
+        _reply(h, 404, {"error": "unknown tenant"})
+        return
+
+    expected = _hmac.new(
+        row["heartbeat_secret"].encode(), raw, _hashlib.sha256
+    ).hexdigest()
+    if not _hmac.compare_digest(expected, provided):
+        log.warning("heartbeat HMAC mismatch for tenant %s", tenant_id)
+        _reply(h, 401, {"error": "bad signature"})
+        return
+
+    try:
+        data = json.loads(raw.decode())
+    except Exception:
+        _reply(h, 400, {"error": "bad json"})
+        return
+
+    now_ts = _now()
+    load = data.get("load") or [None, None, None]
+    failed_names = data.get("failed_service_names") or []
+    if isinstance(failed_names, list):
+        failed_names = ",".join(str(n) for n in failed_names)[:500]
+
+    conn = _db()
+    try:
+        # Upsert latest state
+        conn.execute(
+            """
+            INSERT INTO tenant_heartbeats (
+                tenant_id, received_at, cpu_percent, ram_percent, disk_percent,
+                uptime_seconds, load_1, load_5, load_15, openclaw_version,
+                docker_containers, docker_containers_running,
+                failed_services, failed_service_names,
+                tls_cert_days_left, restart_loop_count, raw_payload
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(tenant_id) DO UPDATE SET
+                received_at=excluded.received_at,
+                cpu_percent=excluded.cpu_percent,
+                ram_percent=excluded.ram_percent,
+                disk_percent=excluded.disk_percent,
+                uptime_seconds=excluded.uptime_seconds,
+                load_1=excluded.load_1, load_5=excluded.load_5, load_15=excluded.load_15,
+                openclaw_version=excluded.openclaw_version,
+                docker_containers=excluded.docker_containers,
+                docker_containers_running=excluded.docker_containers_running,
+                failed_services=excluded.failed_services,
+                failed_service_names=excluded.failed_service_names,
+                tls_cert_days_left=excluded.tls_cert_days_left,
+                restart_loop_count=excluded.restart_loop_count,
+                raw_payload=excluded.raw_payload
+            """,
+            (
+                tenant_id, now_ts,
+                data.get("cpu"), data.get("ram"), data.get("disk"),
+                data.get("uptime"),
+                load[0] if len(load) > 0 else None,
+                load[1] if len(load) > 1 else None,
+                load[2] if len(load) > 2 else None,
+                data.get("openclaw_version"),
+                data.get("docker_total"), data.get("docker_running"),
+                data.get("failed_services"),
+                failed_names,
+                data.get("tls_days_left"),
+                data.get("restart_loops"),
+                raw.decode(errors="replace")[:8192],
+            ),
+        )
+
+        # Append to history if enough time has passed since last sample.
+        last = conn.execute(
+            "SELECT received_at FROM tenant_heartbeat_history "
+            "WHERE tenant_id=? ORDER BY received_at DESC LIMIT 1",
+            (tenant_id,),
+        ).fetchone()
+        if not last or (now_ts - last["received_at"]) >= HISTORY_SAMPLE_INTERVAL:
+            conn.execute(
+                "INSERT INTO tenant_heartbeat_history "
+                "(tenant_id, received_at, cpu_percent, ram_percent, disk_percent) "
+                "VALUES (?,?,?,?,?)",
+                (tenant_id, now_ts, data.get("cpu"),
+                 data.get("ram"), data.get("disk")),
+            )
+            # Prune: keep 7 days
+            cutoff = now_ts - (7 * 86400)
+            conn.execute(
+                "DELETE FROM tenant_heartbeat_history "
+                "WHERE tenant_id=? AND received_at < ?",
+                (tenant_id, cutoff),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True})
+
+
+def tenant_health_status(heartbeat_row: Optional[dict]) -> str:
+    """Derive a single-word status from a heartbeat row.
+    'running' | 'degraded' | 'stale' | 'unknown'."""
+    if not heartbeat_row:
+        return "unknown"
+    age = _now() - (heartbeat_row.get("received_at") or 0)
+    if age > 600:                   # > 10 min
+        return "stale"
+    cpu = heartbeat_row.get("cpu_percent") or 0
+    ram = heartbeat_row.get("ram_percent") or 0
+    disk = heartbeat_row.get("disk_percent") or 0
+    failed = heartbeat_row.get("failed_services") or 0
+    restarts = heartbeat_row.get("restart_loop_count") or 0
+    if failed > 0 or restarts > 0 or disk > 95:
+        return "degraded"
+    if cpu > 95 or ram > 95:
+        return "degraded"
+    return "running"
+
+
 # ── Main dispatcher ───────────────────────────────────────────────────
 #
 # Called from WebhookHandler.do_GET / do_POST in app.py to take over
@@ -1694,4 +1955,188 @@ def handle_post(h: http.server.BaseHTTPRequestHandler) -> bool:
         tid = path[len("/api/admin/tenants/"):-len("/reset-clawmine")]
         handle_admin_reset_clawmine(h, tid)
         return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/reboot"):
+        tid = path[len("/api/admin/tenants/"):-len("/reboot")]
+        handle_admin_hz_action(h, tid, "reboot")
+        return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/snapshot"):
+        tid = path[len("/api/admin/tenants/"):-len("/snapshot")]
+        handle_admin_snapshot(h, tid)
+        return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/destroy"):
+        tid = path[len("/api/admin/tenants/"):-len("/destroy")]
+        handle_admin_destroy(h, tid)
+        return True
     return False
+
+
+# ── Hetzner action helpers ───────────────────────────────────────────
+
+HETZNER_TOKEN_FILE = pathlib.Path("/etc/opspocket/hetzner-token")
+
+
+def _hetzner_token() -> Optional[str]:
+    try:
+        return HETZNER_TOKEN_FILE.read_text().strip() or None
+    except Exception:
+        return None
+
+
+def _hetzner_post(path: str, body: Optional[dict] = None) -> tuple[int, dict]:
+    key = _hetzner_token()
+    if not key:
+        return 500, {"error": "hetzner token unreadable"}
+    data = json.dumps(body or {}).encode()
+    req = urllib.request.Request(
+        "https://api.hetzner.cloud/v1" + path,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read())
+        except Exception:
+            return e.code, {"error": str(e)}
+    except Exception as e:
+        return 0, {"error": str(e)}
+
+
+def _hetzner_delete(path: str) -> tuple[int, dict]:
+    key = _hetzner_token()
+    if not key:
+        return 500, {"error": "hetzner token unreadable"}
+    req = urllib.request.Request(
+        "https://api.hetzner.cloud/v1" + path,
+        headers={"Authorization": f"Bearer {key}"},
+        method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            raw = r.read()
+            return r.status, (json.loads(raw) if raw else {"ok": True})
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read())
+        except Exception:
+            return e.code, {"error": str(e)}
+    except Exception as e:
+        return 0, {"error": str(e)}
+
+
+def _tenant_row(tenant_id: str) -> Optional[dict]:
+    conn = _db()
+    try:
+        r = conn.execute("SELECT * FROM tenants WHERE id=?", (tenant_id,)).fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+def handle_admin_hz_action(h, tenant_id: str, action: str):
+    t = _tenant_row(tenant_id)
+    if not t or not t.get("hetzner_server_id"):
+        _reply(h, 200, {"ok": False, "error": "no hetzner server on tenant"})
+        return
+    sid = t["hetzner_server_id"]
+    status, data = _hetzner_post(f"/servers/{sid}/actions/{action}")
+    conn = _db()
+    try:
+        _audit(conn, _admin_actor(h), f"hetzner.{action}",
+               target_type="tenant", target_id=tenant_id,
+               detail=json.dumps({"hetzner_server_id": sid,
+                                   "response_status": status}),
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    if 200 <= status < 300:
+        _reply(h, 200, {"ok": True, "action": data.get("action")})
+    else:
+        _reply(h, 200, {"ok": False, "error": data, "status": status})
+
+
+def handle_admin_snapshot(h, tenant_id: str):
+    t = _tenant_row(tenant_id)
+    if not t or not t.get("hetzner_server_id"):
+        _reply(h, 200, {"ok": False, "error": "no hetzner server on tenant"})
+        return
+    sid = t["hetzner_server_id"]
+    desc = f"Manual snapshot — tenant {tenant_id} — {_iso_now()}"
+    status, data = _hetzner_post(
+        f"/servers/{sid}/actions/create_image",
+        {
+            "type": "snapshot",
+            "description": desc,
+            "labels": {
+                "opspocket_snapshot": "manual",
+                "server_name": t.get("domain") or f"t-{tenant_id}",
+                "tenant_id": tenant_id,
+            },
+        },
+    )
+    conn = _db()
+    try:
+        _audit(conn, _admin_actor(h), "hetzner.snapshot",
+               target_type="tenant", target_id=tenant_id,
+               detail=json.dumps({"image_id": data.get("image", {}).get("id"),
+                                   "response_status": status}),
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    if 200 <= status < 300:
+        _reply(h, 200, {"ok": True,
+                         "image_id": data.get("image", {}).get("id"),
+                         "action_id": data.get("action", {}).get("id")})
+    else:
+        _reply(h, 200, {"ok": False, "error": data, "status": status})
+
+
+def handle_admin_destroy(h, tenant_id: str):
+    """Destroy the Hetzner server + mark tenant cancelled.
+    Does NOT touch Stripe (that's a separate action)."""
+    body = _body_json(h)
+    if body.get("confirm") != tenant_id:
+        _reply(h, 200, {
+            "ok": False,
+            "error": "must POST {\"confirm\": \"<tenant_id>\"} to confirm",
+        })
+        return
+    t = _tenant_row(tenant_id)
+    if not t:
+        _reply(h, 404, {"error": "tenant not found"})
+        return
+    sid = t.get("hetzner_server_id")
+    if sid:
+        status, data = _hetzner_delete(f"/servers/{sid}")
+    else:
+        status, data = 200, {"ok": True, "note": "no hetzner server to delete"}
+    conn = _db()
+    try:
+        conn.execute(
+            "UPDATE tenants SET status='cancelled', last_status_change=?, "
+            "notes=COALESCE(notes,'') || ' · destroyed by admin ' || ? "
+            "WHERE id=?",
+            (_iso_now(), _iso_now(), tenant_id),
+        )
+        _audit(conn, _admin_actor(h), "tenant.destroy",
+               target_type="tenant", target_id=tenant_id,
+               detail=json.dumps({"hetzner_server_id": sid,
+                                   "response_status": status}),
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {
+        "ok": status < 300,
+        "hetzner_response": data,
+        "status": status,
+    })

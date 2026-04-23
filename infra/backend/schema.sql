@@ -276,6 +276,65 @@ CREATE TABLE IF NOT EXISTS feature_flags (
   PRIMARY KEY (tenant_id, flag)
 );
 
+-- ── Heartbeat secret lives on the tenant row ──────────────────────
+-- We can't ALTER in CREATE IF NOT EXISTS, so we add the column below
+-- (SQLite ADD COLUMN is idempotent via our migration helper in app.py).
+
+-- ── Heartbeat latest state (one row per tenant) ────────────────────
+-- Tenant boxes POST to /api/tenants/<id>/heartbeat every 60s with a
+-- small JSON payload + HMAC-SHA256 signature using the tenant's
+-- per-tenant heartbeat_secret. We upsert this row + append to history.
+CREATE TABLE IF NOT EXISTS tenant_heartbeats (
+  tenant_id TEXT PRIMARY KEY,
+  received_at INTEGER NOT NULL,          -- unix seconds; freshness = now - received_at
+  cpu_percent REAL,
+  ram_percent REAL,
+  disk_percent REAL,
+  uptime_seconds INTEGER,
+  load_1 REAL,
+  load_5 REAL,
+  load_15 REAL,
+  openclaw_version TEXT,
+  docker_containers INTEGER,
+  docker_containers_running INTEGER,
+  failed_services INTEGER,
+  failed_service_names TEXT,             -- comma-joined
+  tls_cert_days_left INTEGER,
+  restart_loop_count INTEGER,            -- containers that restarted >2x in last 10 min
+  raw_payload TEXT,                      -- full JSON for debugging
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS tenant_heartbeat_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  received_at INTEGER NOT NULL,
+  cpu_percent REAL,
+  ram_percent REAL,
+  disk_percent REAL
+);
+CREATE INDEX IF NOT EXISTS idx_hb_hist_tenant ON tenant_heartbeat_history(tenant_id, received_at);
+
+-- ── Hetzner metrics cache (hypervisor view) ────────────────────────
+CREATE TABLE IF NOT EXISTS hetzner_metrics (
+  server_id INTEGER NOT NULL,
+  ts INTEGER NOT NULL,                   -- unix seconds
+  cpu_percent REAL,
+  net_in_bytes INTEGER,
+  net_out_bytes INTEGER,
+  PRIMARY KEY (server_id, ts)
+);
+CREATE INDEX IF NOT EXISTS idx_hz_metrics_ts ON hetzner_metrics(server_id, ts DESC);
+
+-- Snapshot of current month's traffic for each server (cheap query).
+CREATE TABLE IF NOT EXISTS hetzner_traffic (
+  server_id INTEGER PRIMARY KEY,
+  included_bytes INTEGER,                -- monthly included (e.g. 20 TB)
+  outgoing_bytes INTEGER,
+  ingoing_bytes INTEGER,
+  synced_at INTEGER NOT NULL
+);
+
 -- ── GDPR / data subject requests ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS gdpr_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

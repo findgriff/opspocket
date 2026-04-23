@@ -512,6 +512,39 @@ cat > /root/CREDENTIALS.json <<CREDS
 CREDS
 ok "Credentials written to /root/CREDENTIALS.json (0600)"
 
+# ── Heartbeat daemon ────────────────────────────────────────────────
+# Pushes per-minute tenant telemetry (CPU / RAM / disk / uptime /
+# OpenClaw version / failed services / TLS cert days / docker health)
+# to the OpsPocket backend at /api/tenants/<TENANT_ID>/heartbeat.
+# HMAC-signed with a per-tenant secret. Only installed when the
+# orchestrator passes TENANT_ID + HEARTBEAT_SECRET env vars.
+if [[ -n "${TENANT_ID:-}" && -n "${HEARTBEAT_SECRET:-}" ]]; then
+  section "Heartbeat daemon"
+  install -d -m 700 /etc/opspocket
+  cat > /etc/opspocket/heartbeat.conf <<HB
+TENANT_ID=${TENANT_ID}
+HEARTBEAT_SECRET=${HEARTBEAT_SECRET}
+HEARTBEAT_URL=${HEARTBEAT_URL:-https://opspocket.com/api/tenants/${TENANT_ID}/heartbeat}
+HB
+  chmod 600 /etc/opspocket/heartbeat.conf
+
+  # Source the heartbeat script from the /opt/opspocket/tenant/
+  # directory if the orchestrator uploaded it; else skip heartbeat
+  # install with a warning.
+  if [[ -f /tmp/opspocket-heartbeat.sh ]]; then
+    install -m 755 /tmp/opspocket-heartbeat.sh /usr/local/bin/opspocket-heartbeat.sh
+    install -m 644 /tmp/opspocket-heartbeat.service /etc/systemd/system/
+    install -m 644 /tmp/opspocket-heartbeat.timer /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable --now opspocket-heartbeat.timer
+    ok "Heartbeat timer armed — telemetry posts every 60 s"
+  else
+    warn "Heartbeat assets not found at /tmp/ — skipped. Orchestrator must upload opspocket-heartbeat.{sh,service,timer} before running install-openclaw.sh"
+  fi
+else
+  warn "No TENANT_ID / HEARTBEAT_SECRET — heartbeat daemon NOT installed (this is BYO-VPS mode)"
+fi
+
 # Mark success — the EXIT trap will print the credentials card with
 # the "✓ deployed" status instead of the "⚠ INCOMPLETE" fallback.
 INSTALL_SUCCESS=1

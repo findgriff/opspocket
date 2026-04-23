@@ -121,6 +121,12 @@ def db_init() -> None:
     conn = db_connect()
     try:
         conn.executescript(SCHEMA_PATH.read_text())
+        # Idempotent ALTER — add heartbeat_secret column if missing
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(tenants)").fetchall()]
+        if "heartbeat_secret" not in cols:
+            conn.execute("ALTER TABLE tenants ADD COLUMN heartbeat_secret TEXT")
+            log.info("tenants: added heartbeat_secret column")
+        conn.commit()
     finally:
         conn.close()
     log.info("db initialised at %s", DB_PATH)
@@ -385,6 +391,18 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
                 self._reply(500, b'{"error":"server error"}')
                 return
 
+        # Heartbeat endpoint — no session auth, HMAC-signed by tenant
+        if self.path.startswith("/api/tenants/") and self.path.endswith("/heartbeat"):
+            try:
+                import api_extras  # type: ignore
+                tid = self.path[len("/api/tenants/"):-len("/heartbeat")]
+                api_extras.handle_tenant_heartbeat(self, tid)
+                return
+            except Exception as e:
+                log.exception("heartbeat error: %s", e)
+                self._reply(500, b'{"error":"server error"}')
+                return
+
         if self.path != "/api/stripe-webhook":
             self._reply(404, b'{"error":"not found"}')
             return
@@ -472,13 +490,15 @@ def handle_checkout_completed(event: dict) -> None:
                 if row:
                     log.info("subscription %s already has tenant %s", subscription_id, row["id"])
                     return
+            heartbeat_secret = secrets.token_urlsafe(32)
             conn.execute(
                 """INSERT INTO tenants (
                     id, customer_email, stripe_customer_id, stripe_subscription_id,
-                    tier, interval, status, created_at, last_status_change
-                ) VALUES (?,?,?,?,?,?,?,?,?)""",
+                    tier, interval, status, created_at, last_status_change,
+                    heartbeat_secret
+                ) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (tenant_id, email, customer_id, subscription_id or None,
-                 tier, interval, "pending", now, now),
+                 tier, interval, "pending", now, now, heartbeat_secret),
             )
         finally:
             conn.close()

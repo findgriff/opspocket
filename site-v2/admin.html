@@ -245,7 +245,38 @@ async function api(path,opts={}){
 function esc(s){if(s==null)return '';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])}
 function money(minor,currency){if(minor==null)return '—';return (currency||'gbp').toUpperCase()+' '+(minor/100).toFixed(2)}
 function fmtDate(s){if(!s)return '—';const d=typeof s==='number'?new Date(s*1000):new Date(s);return d.toLocaleString()}
+function fmtAgo(unixSec){if(!unixSec)return '—';const a=Math.floor(Date.now()/1000)-unixSec;if(a<60)return a+'s ago';if(a<3600)return Math.floor(a/60)+'m ago';if(a<86400)return Math.floor(a/3600)+'h ago';return Math.floor(a/86400)+'d ago'}
+function fmtUptime(s){if(!s)return '—';const d=Math.floor(s/86400);const h=Math.floor((s%86400)/3600);return d>0?d+'d '+h+'h':h+'h'}
+function bar(pct){if(pct==null)return '—';const p=Math.min(100,Math.max(0,pct));const col=p>90?'#ff6666':p>70?'#ffb800':'#7bc47f';return `<div style="background:#1c1c1f;border-radius:3px;height:6px;overflow:hidden;width:100%"><div style="background:${col};width:${p}%;height:100%"></div></div><div style="font-size:11px;color:var(--muted);margin-top:2px">${p.toFixed(1)}%</div>`}
 function badge(s){return `<span class="badge badge-${esc(s)}">${esc(s)}</span>`}
+function renderHealthBlock(d,hb,hist){
+  const health=d.health_status||'unknown';
+  const healthColor=health==='running'?'#7bc47f':health==='degraded'?'#ffb800':health==='stale'?'#9aa0a6':'#888';
+  let out=`<div style="padding:12px;background:var(--panel-2);border-radius:8px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="width:12px;height:12px;border-radius:50%;background:${healthColor};box-shadow:0 0 8px ${healthColor}"></div>
+      <strong style="color:${healthColor};text-transform:uppercase;letter-spacing:0.1em;font-size:12px">${esc(health)}</strong>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:10px">
+      <div><div class="card-meta">CPU</div>${bar(hb.cpu_percent)}</div>
+      <div><div class="card-meta">RAM</div>${bar(hb.ram_percent)}</div>
+      <div><div class="card-meta">Disk</div>${bar(hb.disk_percent)}</div>
+    </div>
+    <div class="kv" style="grid-template-columns:130px 1fr;font-size:11px">
+      <div class="k">Uptime</div><div class="v">${fmtUptime(hb.uptime_seconds)}</div>
+      <div class="k">Load 1/5/15</div><div class="v">${esc(hb.load_1||'—')} · ${esc(hb.load_5||'—')} · ${esc(hb.load_15||'—')}</div>
+      <div class="k">OpenClaw ver</div><div class="v">${esc(hb.openclaw_version||'—')}</div>
+      <div class="k">Docker (run/total)</div><div class="v">${esc(hb.docker_containers_running||0)}/${esc(hb.docker_containers||0)}</div>
+      <div class="k">Failed services</div><div class="v" style="color:${hb.failed_services?'var(--accent)':'var(--fg)'}">${esc(hb.failed_services||0)} ${hb.failed_service_names?'· '+esc(hb.failed_service_names):''}</div>
+      <div class="k">Restart loops</div><div class="v" style="color:${hb.restart_loop_count?'var(--accent)':'var(--fg)'}">${esc(hb.restart_loop_count||0)}</div>
+      <div class="k">TLS cert days</div><div class="v" style="color:${(hb.tls_cert_days_left??30)<14?'var(--accent)':'var(--fg)'}">${esc(hb.tls_cert_days_left!=null?hb.tls_cert_days_left+'d':'—')}</div>
+    </div>
+  </div>`;
+  if(hist&&hist.length){
+    out+='<div class="card-meta">Last 24 h samples ('+hist.length+' points) — most recent first</div>';
+  }
+  return out;
+}
 
 // Tabs
 $$(".tab").forEach(t=>t.addEventListener("click",()=>{
@@ -358,9 +389,17 @@ function renderDrawer(d){
         <button class="btn btn-small" onclick="impersonate('${t.id}')">🎭 Impersonate (magic link)</button>
         <button class="btn btn-small" onclick="mintPair('${t.id}')">📱 New pair code</button>
         <button class="btn btn-small" onclick="resetClawminePassword('${t.id}')">🔑 Reset Control-UI password</button>
-        <button class="btn btn-small btn-danger" onclick="cancelSub('${t.id}')">🛑 Cancel subscription</button>
+        <button class="btn btn-small" onclick="hzAction('${t.id}','reboot')">🔄 Reboot VPS</button>
+        <button class="btn btn-small" onclick="hzSnapshot('${t.id}')">📸 Snapshot now</button>
         <button class="btn btn-small" onclick="toggleFlag('${t.id}','beta.features')">🚩 Flag: beta.features (${flagsMap['beta.features']?'on':'off'})</button>
+        <button class="btn btn-small btn-danger" onclick="cancelSub('${t.id}')">🛑 Cancel subscription</button>
+        <button class="btn btn-small btn-danger" onclick="destroyTenant('${t.id}')">💣 Destroy VPS</button>
       </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>Health${d.heartbeat?` · <span style="color:var(--muted);font-weight:400;font-size:11px">last seen ${fmtAgo(d.heartbeat.received_at)}</span>`:''}</h3>
+      ${d.heartbeat ? renderHealthBlock(d, d.heartbeat, d.heartbeat_history) : '<div class="empty">No heartbeat received yet. Either the tenant is new or the opspocket-heartbeat.timer isn\\'t installed.</div>'}
     </div>
 
     <div class="drawer-section">
@@ -797,6 +836,36 @@ async function loadCustomersV2(){
 }
 // Override the older non-clickable customer loader
 loadCustomers=loadCustomersV2;
+
+// ── Hetzner VPS actions ─────────────────────────────────────────
+async function hzAction(tid,action){
+  if(!confirm(`${action.toUpperCase()} this tenant's VPS? This WILL briefly interrupt service.`))return;
+  toast(`Requesting ${action}…`);
+  const r=await api(`/api/admin/tenants/${tid}/${action}`,{method:"POST"});
+  if(!r.ok||r.data.ok===false){
+    alert(`${action} failed:\n\n${r.data.error?JSON.stringify(r.data.error):r.status}`);
+    return;
+  }
+  toast(`${action} queued on Hetzner`);
+  setTimeout(()=>openTenant(tid),2000);
+}
+async function hzSnapshot(tid){
+  if(!confirm("Take a full-disk snapshot of this tenant's VPS? Takes ~30 sec."))return;
+  toast("Requesting snapshot…");
+  const r=await api("/api/admin/tenants/"+tid+"/snapshot",{method:"POST"});
+  if(!r.ok||r.data.ok===false){alert("Snapshot failed: "+(r.data.error||r.status));return}
+  toast(`Snapshot started (image id ${r.data.image_id})`);
+}
+async function destroyTenant(tid){
+  const typed=prompt(`⚠️ DESTRUCTIVE — this deletes the Hetzner VPS.\n\nType the tenant ID to confirm:\n\n${tid}`);
+  if(typed!==tid){toast("Cancelled — no match",true);return}
+  toast("Destroying VPS…");
+  const r=await api("/api/admin/tenants/"+tid+"/destroy",{method:"POST",body:JSON.stringify({confirm:tid})});
+  if(!r.ok||r.data.ok===false){alert("Destroy failed: "+JSON.stringify(r.data));return}
+  toast("VPS destroyed + tenant marked cancelled");
+  closeDrawer();
+  loadTenants();
+}
 
 // ── Reset clawmine password (tenant drawer) ─────────────────────
 async function resetClawminePassword(tenantId){

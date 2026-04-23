@@ -159,8 +159,125 @@ def sync_snapshots() -> int:
     return n
 
 
+def sync_traffic() -> int:
+    """Read per-server traffic counters (outgoing/ingoing + included)."""
+    key = _key()
+    if not key:
+        raise RuntimeError("hetzner token not readable")
+    now = int(time.time())
+    n = 0
+    conn = _db()
+    try:
+        page = _get(key, "/servers")
+        for s in page.get("servers", []):
+            conn.execute(
+                """
+                INSERT INTO hetzner_traffic
+                  (server_id, included_bytes, outgoing_bytes, ingoing_bytes, synced_at)
+                VALUES (?,?,?,?,?)
+                ON CONFLICT(server_id) DO UPDATE SET
+                  included_bytes=excluded.included_bytes,
+                  outgoing_bytes=excluded.outgoing_bytes,
+                  ingoing_bytes=excluded.ingoing_bytes,
+                  synced_at=excluded.synced_at
+                """,
+                (
+                    s["id"],
+                    s.get("included_traffic"),
+                    s.get("outgoing_traffic"),
+                    s.get("ingoing_traffic"),
+                    now,
+                ),
+            )
+            n += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return n
+
+
+def sync_metrics_for(server_id: int, minutes: int = 60) -> int:
+    """Pull last <minutes> of cpu + network metrics for one server.
+    Call sparingly — one server at a time."""
+    key = _key()
+    if not key:
+        raise RuntimeError("hetzner token not readable")
+    from datetime import datetime, timezone, timedelta
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(minutes=minutes)
+    # Hetzner metrics types: cpu, disk, network
+    params = (
+        f"?type=cpu,network"
+        f"&start={start.isoformat().replace('+00:00','Z')}"
+        f"&end={end.isoformat().replace('+00:00','Z')}"
+        f"&step=60"
+    )
+    try:
+        data = _get(key, f"/servers/{server_id}/metrics{params}")
+    except Exception as e:
+        log.error("hetzner metrics fetch failed for %s: %s", server_id, e)
+        return 0
+    metrics = data.get("metrics", {})
+    ts_values = metrics.get("time_series", {}) or {}
+    cpu_points = (ts_values.get("cpu") or {}).get("values") or []
+    net_in_points = (ts_values.get("network.0.bandwidth.in") or {}).get("values") or []
+    net_out_points = (ts_values.get("network.0.bandwidth.out") or {}).get("values") or []
+
+    # Each points list is [[unix_float, "value_str"], ...]
+    # Build a dict keyed by timestamp.
+    series = {}
+    for p in cpu_points:
+        ts = int(p[0]); series.setdefault(ts, {})["cpu"] = float(p[1])
+    for p in net_in_points:
+        ts = int(p[0]); series.setdefault(ts, {})["in"] = int(float(p[1]))
+    for p in net_out_points:
+        ts = int(p[0]); series.setdefault(ts, {})["out"] = int(float(p[1]))
+
+    conn = _db()
+    n = 0
+    try:
+        for ts, vals in series.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO hetzner_metrics "
+                "(server_id, ts, cpu_percent, net_in_bytes, net_out_bytes) "
+                "VALUES (?,?,?,?,?)",
+                (server_id, ts, vals.get("cpu"),
+                 vals.get("in"), vals.get("out")),
+            )
+            n += 1
+        # Prune older than 7 days
+        conn.execute(
+            "DELETE FROM hetzner_metrics WHERE server_id=? AND ts < ?",
+            (server_id, int(time.time()) - 7 * 86400),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return n
+
+
+def sync_metrics_all(minutes: int = 60) -> int:
+    """Pull metrics for every server we know about."""
+    conn = _db()
+    try:
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM hetzner_servers"
+        ).fetchall()]
+    finally:
+        conn.close()
+    total = 0
+    for sid in ids:
+        total += sync_metrics_for(sid, minutes=minutes)
+    return total
+
+
 def sync_all() -> dict:
-    return {"servers": sync_servers(), "snapshots": sync_snapshots()}
+    return {
+        "servers": sync_servers(),
+        "snapshots": sync_snapshots(),
+        "traffic": sync_traffic(),
+        "metrics_points": sync_metrics_all(minutes=60),
+    }
 
 
 if __name__ == "__main__":
