@@ -1127,6 +1127,293 @@ def handle_admin_flag_set(h, tenant_id):
     _reply(h, 200, {"ok": True})
 
 
+def handle_admin_search(h, query):
+    """Search across customers and tenants by name / email / phone /
+    company / domain. Returns up to 30 hits."""
+    q = (query.get("q", [""])[0] if query else "").strip().lower()
+    if not q:
+        _reply(h, 200, {"query": "", "customers": [], "tenants": []})
+        return
+    like = f"%{q}%"
+    conn = _db()
+    try:
+        customers = [dict(r) for r in conn.execute(
+            "SELECT email, company_name, contact_name, phone, lifecycle, "
+            "health_score, account_owner "
+            "FROM customers "
+            "WHERE lower(email) LIKE ? OR lower(COALESCE(company_name,'')) LIKE ? "
+            "OR lower(COALESCE(contact_name,'')) LIKE ? "
+            "OR COALESCE(phone,'') LIKE ? "
+            "LIMIT 30",
+            (like, like, like, like),
+        ).fetchall()]
+        tenants = [dict(r) for r in conn.execute(
+            "SELECT id, customer_email, tier, domain, hetzner_ip, status, "
+            "created_at FROM tenants "
+            "WHERE lower(customer_email) LIKE ? OR lower(COALESCE(domain,'')) LIKE ? "
+            "OR COALESCE(hetzner_ip,'') LIKE ? "
+            "LIMIT 30",
+            (like, like, like),
+        ).fetchall()]
+    finally:
+        conn.close()
+    _reply(h, 200, {"query": q, "customers": customers, "tenants": tenants})
+
+
+def handle_admin_customer_detail(h, email):
+    """Full customer profile — CRM fields + all tenants + all invoices
+    + all charges + all notes + all tasks + audit — joined by email."""
+    email = (email or "").strip().lower()
+    if not email:
+        _reply(h, 400, {"error": "email required"})
+        return
+    conn = _db()
+    try:
+        cust = conn.execute(
+            "SELECT * FROM customers WHERE email=?", (email,)
+        ).fetchone()
+        tenants = [dict(r) for r in conn.execute(
+            "SELECT * FROM tenants WHERE lower(customer_email)=? "
+            "ORDER BY created_at DESC",
+            (email,),
+        ).fetchall()]
+        stripe_ids = [t["stripe_customer_id"] for t in tenants
+                      if t.get("stripe_customer_id")]
+        invoices = []
+        charges = []
+        subs = []
+        if stripe_ids:
+            placeholders = ",".join("?" * len(stripe_ids))
+            invoices = [dict(r) for r in conn.execute(
+                f"SELECT * FROM stripe_invoices WHERE customer_id IN ({placeholders}) "
+                f"ORDER BY created_at DESC LIMIT 50", stripe_ids,
+            ).fetchall()]
+            charges = [dict(r) for r in conn.execute(
+                f"SELECT * FROM stripe_charges WHERE customer_id IN ({placeholders}) "
+                f"ORDER BY created_at DESC LIMIT 50", stripe_ids,
+            ).fetchall()]
+            subs = [dict(r) for r in conn.execute(
+                f"SELECT * FROM stripe_subscriptions WHERE customer_id IN ({placeholders})",
+                stripe_ids,
+            ).fetchall()]
+        notes = [dict(r) for r in conn.execute(
+            "SELECT * FROM crm_notes WHERE customer_email=? "
+            "OR tenant_id IN (SELECT id FROM tenants WHERE lower(customer_email)=?) "
+            "ORDER BY pinned DESC, created_at DESC LIMIT 50",
+            (email, email),
+        ).fetchall()]
+        tasks = [dict(r) for r in conn.execute(
+            "SELECT * FROM crm_tasks WHERE customer_email=? "
+            "OR tenant_id IN (SELECT id FROM tenants WHERE lower(customer_email)=?) "
+            "ORDER BY (status='open') DESC, created_at DESC LIMIT 50",
+            (email, email),
+        ).fetchall()]
+        tickets = [dict(r) for r in conn.execute(
+            "SELECT * FROM support_tickets WHERE lower(customer_email)=? "
+            "ORDER BY created_at DESC LIMIT 50",
+            (email,),
+        ).fetchall()]
+        audit = [dict(r) for r in conn.execute(
+            "SELECT * FROM audit_log WHERE "
+            "(target_type='customer' AND target_id=?) OR "
+            "(target_type='tenant' AND target_id IN "
+            "(SELECT id FROM tenants WHERE lower(customer_email)=?)) "
+            "ORDER BY created_at DESC LIMIT 50",
+            (email, email),
+        ).fetchall()]
+        sessions_list = [dict(r) for r in conn.execute(
+            "SELECT * FROM sessions WHERE lower(email)=? AND expires_at > ? "
+            "ORDER BY issued_at DESC LIMIT 10",
+            (email, _now()),
+        ).fetchall()]
+    finally:
+        conn.close()
+    _reply(h, 200, {
+        "email": email,
+        "customer": dict(cust) if cust else None,
+        "tenants": tenants,
+        "stripe_subscriptions": subs,
+        "stripe_invoices": invoices,
+        "stripe_charges": charges,
+        "notes": notes,
+        "tasks": tasks,
+        "support_tickets": tickets,
+        "audit": audit,
+        "active_sessions": sessions_list,
+    })
+
+
+def handle_admin_reset_clawmine(h, tenant_id):
+    """Rotate the clawmine basic-auth password on the customer's tenant
+    VPS and email them the new credentials.
+
+    Steps:
+      1. Generate a new URL-safe password
+      2. SSH into tenant box (orchestrator SSH key is pre-installed)
+      3. Rewrite the Caddyfile basic_auth hash on the tenant
+      4. Reload Caddy on the tenant
+      5. Update /root/CREDENTIALS.json on the tenant
+      6. Update tenants.openclaw_password in local DB
+      7. Email the customer the new credentials
+      8. Audit
+    """
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM tenants WHERE id=?", (tenant_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        _reply(h, 404, {"error": "tenant not found"})
+        return
+    tenant = dict(row)
+    ip = tenant.get("hetzner_ip")
+    if not ip:
+        _reply(h, 400, {"error": "tenant has no IP — cannot SSH"})
+        return
+
+    new_password = secrets.token_urlsafe(18)[:24]
+    try:
+        bcrypt_hash = _caddy_hash_password(new_password)
+    except Exception as e:
+        log.error("caddy hash-password failed: %s", e)
+        _reply(h, 500, {"error": f"hash generation failed: {e}"})
+        return
+
+    # The tenant's OpenClaw Caddy config is at
+    # /etc/caddy/Caddyfile.d/openclaw.caddy on the tenant box (per
+    # install-openclaw.sh convention). Rewrite the single basic_auth
+    # line that starts with 'clawmine ' + reload caddy.
+    remote_cmd = (
+        f"set -e; "
+        f"CF=/etc/caddy/Caddyfile.d/openclaw.caddy; "
+        f"if [ ! -f $CF ]; then echo 'no openclaw caddy config'; exit 2; fi; "
+        # Replace the line containing 'clawmine ' (bcrypt hash is on same line)
+        f"sed -i 's|^\\(\\s*\\)clawmine .*|\\1clawmine {bcrypt_hash}|' $CF; "
+        f"caddy validate --config /etc/caddy/Caddyfile 2>&1 >/dev/null || "
+        f"(echo 'caddy validate failed'; exit 3); "
+        f"systemctl reload caddy; "
+        # Update CREDENTIALS.json
+        f"CRED=/root/CREDENTIALS.json; "
+        f"if [ -f $CRED ]; then "
+        f"python3 -c 'import json,sys;p=\"$CRED\";d=json.load(open(p));"
+        f"d[\"password\"]=\"{new_password}\";open(p,\"w\").write(json.dumps(d,indent=2))' "
+        f"|| true; fi; "
+        f"echo OK"
+    )
+
+    import subprocess
+    try:
+        result = subprocess.run(
+            [
+                "ssh",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "ConnectTimeout=6",     # fail fast if tenant is down
+                "-o", "ServerAliveInterval=3",
+                "-o", "ServerAliveCountMax=2",
+                "-o", "BatchMode=yes",
+                f"root@{ip}",
+                remote_cmd,
+            ],
+            capture_output=True, text=True, timeout=20,
+        )
+    except subprocess.TimeoutExpired:
+        _reply(h, 200, {"ok": False,
+                         "error": "SSH timed out — tenant unreachable"})
+        return
+    except Exception as e:
+        _reply(h, 200, {"ok": False, "error": f"SSH invocation failed: {e}"})
+        return
+
+    if result.returncode != 0:
+        log.error("reset-clawmine ssh failed: rc=%s stderr=%s",
+                  result.returncode, result.stderr)
+        _reply(h, 200, {
+            "ok": False,
+            "error": "SSH command failed",
+            "stderr": result.stderr[-500:],
+            "returncode": result.returncode,
+        })
+        return
+
+    # Update local DB
+    conn = _db()
+    try:
+        conn.execute(
+            "UPDATE tenants SET openclaw_password=?, last_status_change=? WHERE id=?",
+            (new_password, _iso_now(), tenant_id),
+        )
+        _audit(conn, _admin_actor(h), "clawmine.reset",
+               target_type="tenant", target_id=tenant_id,
+               detail="password rotated + emailed", ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Email the customer
+    email_sent = False
+    try:
+        from email_sender import send_email  # type: ignore
+        control_url = f"https://{tenant.get('domain')}/"
+        subject = "OpsPocket — your Control UI password has been reset"
+        text = (
+            f"Hi {tenant.get('customer_email')},\n\n"
+            f"Your OpsPocket Control UI password has just been reset.\n\n"
+            f"URL:      {control_url}\n"
+            f"Username: clawmine\n"
+            f"Password: {new_password}\n\n"
+            f"If you didn't ask for this reset, email hello@opspocket.com "
+            f"immediately.\n\n— OpsPocket"
+        )
+        html = (
+            f"<div style=\"font-family:-apple-system,sans-serif;max-width:520px;"
+            f"margin:0 auto;padding:32px;background:#0b0b0d;color:#eee;"
+            f"border-radius:12px\">"
+            f"<h1 style=\"font-size:20px;margin:0 0 12px;color:#fff\">"
+            f"Your OpsPocket password has been reset</h1>"
+            f"<p style=\"color:#aaa;font-size:14px\">Use these new credentials "
+            f"to sign in to your Control UI:</p>"
+            f"<div style=\"background:#141416;border:1px solid #2a2a2a;"
+            f"border-radius:8px;padding:16px;font-family:ui-monospace,monospace;"
+            f"font-size:13px;margin:16px 0\">"
+            f"<div>URL: <a href=\"{control_url}\" style=\"color:#57e3ff\">{control_url}</a></div>"
+            f"<div>Username: <strong style=\"color:#fff\">clawmine</strong></div>"
+            f"<div>Password: <strong style=\"color:#fff\">{new_password}</strong></div>"
+            f"</div>"
+            f"<p style=\"color:#999;font-size:12px\">If you didn't request this, "
+            f"email <a href=\"mailto:hello@opspocket.com\" style=\"color:#57e3ff\">"
+            f"hello@opspocket.com</a> immediately.</p>"
+            f"</div>"
+        )
+        email_sent = send_email(
+            to=tenant["customer_email"], subject=subject, text=text, html=html,
+        )
+    except Exception as e:
+        log.error("password-reset email failed: %s", e)
+
+    _reply(h, 200, {
+        "ok": True,
+        "email_sent": email_sent,
+        "tenant_id": tenant_id,
+        "new_password_shown_to_admin_for_copy": new_password,
+    })
+
+
+def _caddy_hash_password(plaintext: str) -> str:
+    """Invoke Caddy to bcrypt-hash the password. Caddy is on PATH on
+    both dev box and all tenant boxes."""
+    import subprocess
+    result = subprocess.run(
+        ["caddy", "hash-password", "--plaintext", plaintext],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip())
+    return result.stdout.strip()
+
+
 def handle_admin_analytics(h):
     """Compute MRR / ARR / churn / trial / failed payments / etc.
     Uses the local Stripe cache — call /api/admin/sync/stripe first
@@ -1332,6 +1619,13 @@ def handle_get(h: http.server.BaseHTTPRequestHandler) -> bool:
     if path == "/api/admin/tasks":
         handle_admin_all_tasks(h)
         return True
+    if path == "/api/admin/search":
+        handle_admin_search(h, query)
+        return True
+    if path.startswith("/api/admin/customers/"):
+        email = urllib.parse.unquote(path[len("/api/admin/customers/"):])
+        handle_admin_customer_detail(h, email)
+        return True
     if path.startswith("/api/pair/"):
         code = path[len("/api/pair/"):]
         handle_pair(h, code)
@@ -1395,5 +1689,9 @@ def handle_post(h: http.server.BaseHTTPRequestHandler) -> bool:
     if path.startswith("/api/admin/tenants/") and path.endswith("/flags"):
         tid = path[len("/api/admin/tenants/"):-len("/flags")]
         handle_admin_flag_set(h, tid)
+        return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/reset-clawmine"):
+        tid = path[len("/api/admin/tenants/"):-len("/reset-clawmine")]
+        handle_admin_reset_clawmine(h, tid)
         return True
     return False

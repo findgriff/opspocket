@@ -96,11 +96,15 @@ tr.non-clickable:hover{background:transparent}
 <nav class="nav"><div class="nav-inner">
   <div class="brand"><span class="brand-dot"></span>OpsPocket <span class="brand-admin">CONTROL ROOM</span></div>
   <div class="nav-actions">
+    <input id="globalSearch" placeholder="🔍  Search name, email, phone, domain…" style="padding:7px 12px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font:inherit;font-size:13px;width:280px;margin-right:8px" autocomplete="off">
     <button class="btn btn-small" onclick="syncStripe()">↻ Sync Stripe</button>
     <button class="btn btn-small" onclick="syncHetzner()">↻ Sync Hetzner</button>
     <a href="/" style="color:var(--muted);font-size:12px;margin-left:10px">← public site</a>
   </div>
-</div></nav>
+</div>
+<!-- Search results flyout -->
+<div id="searchResults" style="position:absolute;top:54px;right:24px;width:420px;max-height:70vh;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);display:none;z-index:50"></div>
+</nav>
 
 <main class="wrap">
 
@@ -353,6 +357,7 @@ function renderDrawer(d){
       <div class="action-grid">
         <button class="btn btn-small" onclick="impersonate('${t.id}')">🎭 Impersonate (magic link)</button>
         <button class="btn btn-small" onclick="mintPair('${t.id}')">📱 New pair code</button>
+        <button class="btn btn-small" onclick="resetClawminePassword('${t.id}')">🔑 Reset Control-UI password</button>
         <button class="btn btn-small btn-danger" onclick="cancelSub('${t.id}')">🛑 Cancel subscription</button>
         <button class="btn btn-small" onclick="toggleFlag('${t.id}','beta.features')">🚩 Flag: beta.features (${flagsMap['beta.features']?'on':'off'})</button>
       </div>
@@ -592,6 +597,220 @@ async function loadAudit(){
       <td class="mono">${esc(a.ip||'')}</td>
     </tr>`);
   }
+}
+
+// ── Global search ────────────────────────────────────────────────
+const searchInput=$("#globalSearch");
+const searchResults=$("#searchResults");
+let searchTimer=null;
+searchInput.addEventListener("input",()=>{
+  clearTimeout(searchTimer);
+  const q=searchInput.value.trim();
+  if(!q){searchResults.style.display="none";return}
+  searchTimer=setTimeout(()=>runSearch(q),200);
+});
+searchInput.addEventListener("focus",()=>{if(searchInput.value.trim())runSearch(searchInput.value.trim())});
+document.addEventListener("click",e=>{
+  if(!searchResults.contains(e.target)&&e.target!==searchInput)searchResults.style.display="none";
+});
+async function runSearch(q){
+  const r=await api("/api/admin/search?q="+encodeURIComponent(q));
+  if(!r.ok)return;
+  const cust=r.data.customers||[];
+  const ten=r.data.tenants||[];
+  if(!cust.length&&!ten.length){
+    searchResults.innerHTML='<div style="padding:16px;color:var(--muted);font-size:13px">No matches for "'+esc(q)+'"</div>';
+    searchResults.style.display="block";return;
+  }
+  let html="";
+  if(cust.length){
+    html+='<div style="padding:8px 14px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:700;background:var(--panel-2);border-bottom:1px solid var(--border)">Customers ('+cust.length+')</div>';
+    for(const c of cust){
+      html+=`<div onclick="openCustomer('${esc(c.email)}');searchResults.style.display='none'" style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px" onmouseover="this.style.background='var(--panel-2)'" onmouseout="this.style.background=''">
+        <div style="font-weight:600">${esc(c.contact_name||c.company_name||c.email)}</div>
+        <div style="color:var(--muted);font-size:11px">${esc(c.email)} ${c.phone?'· '+esc(c.phone):''} ${c.lifecycle?'· '+badge(c.lifecycle):''}</div>
+      </div>`;
+    }
+  }
+  if(ten.length){
+    html+='<div style="padding:8px 14px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:700;background:var(--panel-2);border-bottom:1px solid var(--border)">Tenants ('+ten.length+')</div>';
+    for(const t of ten){
+      html+=`<div onclick="openTenant('${esc(t.id)}');searchResults.style.display='none'" style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px" onmouseover="this.style.background='var(--panel-2)'" onmouseout="this.style.background=''">
+        <div style="font-weight:600">${esc(t.customer_email)} <span style="color:var(--muted);font-weight:400">· ${esc(t.tier)}</span></div>
+        <div style="color:var(--muted);font-size:11px;font-family:'JetBrains Mono',monospace">${esc(t.domain||'—')} · ${esc(t.hetzner_ip||'—')} · ${badge(t.status)}</div>
+      </div>`;
+    }
+  }
+  searchResults.innerHTML=html;
+  searchResults.style.display="block";
+}
+
+// ── Customer profile drawer ─────────────────────────────────────
+async function openCustomer(email){
+  $("#drawer").classList.add("open");$("#drawerBackdrop").classList.add("show");
+  $("#drawerBody").innerHTML='<div class="empty">Loading…</div>';
+  const r=await api("/api/admin/customers/"+encodeURIComponent(email));
+  if(!r.ok){$("#drawerBody").innerHTML=`<div class="empty">${esc(r.data.error||"error")}</div>`;return}
+  renderCustomerDrawer(r.data);
+}
+function renderCustomerDrawer(d){
+  const c=d.customer||{email:d.email};
+  $("#drawerTitle").textContent=`CUSTOMER · ${d.email}`;
+  const totalPaid=d.stripe_invoices.reduce((s,i)=>s+(i.status==='paid'?(i.amount_paid||0):0),0);
+  const activeSub=d.stripe_subscriptions.find(s=>s.status==='active'||s.status==='trialing');
+  $("#drawerBody").innerHTML=`
+    <div class="drawer-section">
+      <h3>Profile <button class="btn btn-small" style="float:right" onclick="editCustomer('${esc(d.email)}')">Edit</button></h3>
+      <div class="kv">
+        <div class="k">Email</div><div class="v">${esc(d.email)}</div>
+        <div class="k">Contact name</div><div class="v">${esc(c.contact_name||'—')}</div>
+        <div class="k">Job title</div><div class="v">${esc(c.job_title||'—')}</div>
+        <div class="k">Company</div><div class="v">${esc(c.company_name||'—')}</div>
+        <div class="k">Phone</div><div class="v">${esc(c.phone||'—')}</div>
+        <div class="k">Website</div><div class="v">${esc(c.website||'—')}</div>
+        <div class="k">Industry</div><div class="v">${esc(c.industry||'—')}</div>
+        <div class="k">Country</div><div class="v">${esc(c.country||'—')}</div>
+        <div class="k">VAT</div><div class="v">${esc(c.vat_number||'—')}</div>
+        <div class="k">Billing address</div><div class="v">${esc(c.billing_address||'—')}</div>
+        <div class="k">Lifecycle</div><div class="v">${c.lifecycle?badge(c.lifecycle):'—'}</div>
+        <div class="k">Health score</div><div class="v">${esc(c.health_score!=null?c.health_score+'/100':'—')}</div>
+        <div class="k">Tags</div><div class="v">${esc(c.tags||'—')}</div>
+        <div class="k">Owner</div><div class="v">${esc(c.account_owner||'—')}</div>
+        <div class="k">Lead source</div><div class="v">${esc(c.lead_source||'—')}</div>
+        <div class="k">Marketing consent</div><div class="v">${c.consent_marketing?'yes '+(c.consent_updated_at||''):'no'}</div>
+        <div class="k">Notes (internal)</div><div class="v">${esc(c.notes||'—')}</div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>Account actions</h3>
+      <div class="action-grid">
+        <button class="btn btn-small" onclick="sendMagicLink('${esc(d.email)}')">✉️ Email sign-in link</button>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>Subscriptions (${d.stripe_subscriptions.length})</h3>
+      ${activeSub?`<div class="card">
+        <div class="card-meta">${badge(activeSub.status)} · ${money(activeSub.amount,activeSub.currency)}/${esc(activeSub.interval||'?')}</div>
+        Renews ${fmtDate(activeSub.current_period_end)}${activeSub.cancel_at?' · <strong style="color:var(--accent)">ends '+fmtDate(activeSub.cancel_at)+'</strong>':''}
+      </div>`:'<div class="empty">No active subscription.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Tenants (${d.tenants.length})</h3>
+      ${d.tenants.length?d.tenants.map(t=>`<div class="card" style="cursor:pointer" onclick="closeDrawer();setTimeout(()=>openTenant('${esc(t.id)}'),250)">
+        <div class="card-meta">${badge(t.status)} · ${esc(t.tier)} · created ${fmtDate(t.created_at)}</div>
+        <strong>${esc(t.domain||'(provisioning)')}</strong>
+        <div style="color:var(--muted);font-size:11px;font-family:'JetBrains Mono',monospace">${esc(t.id)} · ${esc(t.hetzner_ip||'no IP')}</div>
+      </div>`).join(''):'<div class="empty">No tenants yet.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Invoices (${d.stripe_invoices.length}) · total paid ${money(totalPaid,'gbp')}</h3>
+      ${renderInvoicesTable(d.stripe_invoices)}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Charges (${d.stripe_charges.length})</h3>
+      ${renderChargesTable(d.stripe_charges)}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Support tickets (${d.support_tickets.length})</h3>
+      ${d.support_tickets.length?d.support_tickets.map(t=>`<div class="card">
+        <div class="card-meta">${badge(t.status)} · ${badge(t.priority)} · ${fmtDate(t.created_at)}</div>
+        <strong>${esc(t.subject)}</strong>
+        ${t.body?`<div style="color:var(--muted);font-size:12px;margin-top:4px">${esc(t.body)}</div>`:''}
+      </div>`).join(''):'<div class="empty">No tickets.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Notes (${d.notes.length}) <button class="btn btn-small" style="float:right" onclick="addCustomerNote('${esc(d.email)}')">+ Add note</button></h3>
+      ${d.notes.length?d.notes.map(n=>`<div class="card ${n.pinned?'pinned':''}">
+        <div class="card-meta">${esc(n.author)} · ${fmtDate(n.created_at)}${n.pinned?' · PINNED':''}</div>
+        ${esc(n.body)}
+      </div>`).join(''):'<div class="empty">No notes yet.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Tasks (${d.tasks.length}) <button class="btn btn-small" style="float:right" onclick="addCustomerTask('${esc(d.email)}')">+ Add task</button></h3>
+      ${d.tasks.length?d.tasks.map(tk=>`<div class="card">
+        <div class="card-meta">${badge(tk.status)} · ${badge(tk.priority)} · ${fmtDate(tk.created_at)}</div>
+        ${esc(tk.title)}
+        ${tk.status==='open'?`<div style="margin-top:6px"><button class="btn btn-small" onclick="completeTask(${tk.id})">✓ Complete</button></div>`:''}
+      </div>`).join(''):'<div class="empty">No tasks.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Active sessions (${d.active_sessions.length})</h3>
+      ${d.active_sessions.length?d.active_sessions.map(s=>`<div class="card">
+        <div class="card-meta">Signed in ${fmtDate(s.issued_at)} · expires ${fmtDate(s.expires_at)}</div>
+      </div>`).join(''):'<div class="empty">Not currently signed in.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Audit trail (${d.audit.length})</h3>
+      ${d.audit.length?d.audit.map(a=>`<div class="card">
+        <div class="card-meta">${fmtDate(a.created_at)} · ${esc(a.actor)} · ${esc(a.ip||'')}</div>
+        <strong>${esc(a.action)}</strong> ${esc(a.detail||'')}
+      </div>`).join(''):'<div class="empty">No events yet.</div>'}
+    </div>
+  `;
+}
+
+async function sendMagicLink(email){
+  // Re-use existing login endpoint — generates token + emails it
+  const r=await api("/api/account/login",{method:"POST",body:JSON.stringify({email})});
+  toast(r.ok?"Magic-link emailed to "+email:"Failed",!r.ok);
+}
+async function addCustomerNote(email){
+  const b=prompt("Note text:");if(!b)return;
+  const pinned=confirm("Pin this note to the top?");
+  const r=await api("/api/admin/notes",{method:"POST",body:JSON.stringify({customer_email:email,body:b,pinned})});
+  toast(r.ok?"Note added":"Failed",!r.ok);if(r.ok)openCustomer(email);
+}
+async function addCustomerTask(email){
+  const title=prompt("Task title:");if(!title)return;
+  const priority=prompt("Priority (low/normal/high):","normal")||"normal";
+  const r=await api("/api/admin/tasks",{method:"POST",body:JSON.stringify({customer_email:email,title,priority})});
+  toast(r.ok?"Task added":"Failed",!r.ok);if(r.ok)openCustomer(email);
+}
+
+// Hook Customers tab rows to open the customer drawer
+async function loadCustomersV2(){
+  const r=await api("/api/admin/customers");if(!r.ok)return;
+  const tb=$("#customersBody");tb.innerHTML="";
+  $("#customerCount").textContent=r.data.customers.length+" customers";
+  if(!r.data.customers.length){tb.innerHTML='<tr class="non-clickable"><td colspan="7" class="empty">No customer records yet.</td></tr>';return}
+  for(const c of r.data.customers){
+    tb.insertAdjacentHTML("beforeend",`<tr onclick="openCustomer('${esc(c.email)}')">
+      <td>${esc(c.email)}</td>
+      <td>${esc(c.company_name||'—')}</td>
+      <td>${esc(c.contact_name||'—')}</td>
+      <td>${c.lifecycle?badge(c.lifecycle):'—'}</td>
+      <td class="mono">${esc(c.health_score!=null?c.health_score+'/100':'—')}</td>
+      <td class="mono">${esc(c.tenant_count)}</td>
+      <td>${esc(c.account_owner||'—')}</td>
+    </tr>`);
+  }
+}
+// Override the older non-clickable customer loader
+loadCustomers=loadCustomersV2;
+
+// ── Reset clawmine password (tenant drawer) ─────────────────────
+async function resetClawminePassword(tenantId){
+  if(!confirm("Reset the Control-UI (clawmine) password for this tenant?\n\nThe new password will be:\n  • generated fresh\n  • pushed to the tenant's Caddy config via SSH\n  • emailed to the customer\n\nThey will need to sign in again with the new password."))return;
+  toast("Rotating password on tenant VPS…");
+  const r=await api("/api/admin/tenants/"+tenantId+"/reset-clawmine",{method:"POST"});
+  if(!r.ok||r.data.ok===false){
+    alert("Reset failed:\n\n"+(r.data.error||r.status)+"\n\n"+(r.data.stderr||""));
+    return;
+  }
+  const msg="✓ Password reset.\n\nNew password: "+r.data.new_password_shown_to_admin_for_copy+
+    "\n\nEmail "+(r.data.email_sent?"sent ✓":"FAILED to send ⚠️")+
+    "\n\n(Copy the password now. You can also find it in the tenant row — openclaw_password.)";
+  prompt(msg, r.data.new_password_shown_to_admin_for_copy);
 }
 
 // Initial
