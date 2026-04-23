@@ -69,3 +69,220 @@ CREATE TABLE IF NOT EXISTS pair_codes (
   FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 CREATE INDEX IF NOT EXISTS idx_pair_codes_tenant ON pair_codes(tenant_id);
+
+-- ── CRM: company / account profile ────────────────────────────────
+-- One row per customer email. Free-form fields the founder edits in
+-- /admin, or the customer edits in /account.
+CREATE TABLE IF NOT EXISTS customers (
+  email TEXT PRIMARY KEY,          -- canonical key (lowercase)
+  company_name TEXT,
+  contact_name TEXT,
+  job_title TEXT,
+  phone TEXT,
+  website TEXT,
+  industry TEXT,
+  billing_address TEXT,
+  vat_number TEXT,
+  country TEXT,
+  lifecycle TEXT DEFAULT 'active', -- lead / trial / active / paused / churned
+  health_score INTEGER,            -- 0-100, nullable
+  tags TEXT,                       -- comma-separated
+  account_owner TEXT,              -- 'craig', etc.
+  lead_source TEXT,                -- waitlist / google / referral / etc
+  notes TEXT,                      -- internal free-text
+  consent_marketing INTEGER DEFAULT 0,  -- 0/1
+  consent_updated_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_customers_lifecycle ON customers(lifecycle);
+
+-- ── CRM: free-form notes + tasks (anchored to tenant OR customer) ──
+CREATE TABLE IF NOT EXISTS crm_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT,                  -- optional
+  customer_email TEXT,             -- optional (one of the two should be set)
+  author TEXT NOT NULL,            -- 'craig' / admin name
+  body TEXT NOT NULL,
+  pinned INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crm_notes_tenant ON crm_notes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_crm_notes_email ON crm_notes(customer_email);
+
+CREATE TABLE IF NOT EXISTS crm_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT,
+  customer_email TEXT,
+  title TEXT NOT NULL,
+  due_at TEXT,
+  status TEXT NOT NULL DEFAULT 'open',  -- open / done / cancelled
+  priority TEXT NOT NULL DEFAULT 'normal',  -- low / normal / high
+  assigned_to TEXT,
+  created_at TEXT NOT NULL,
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_crm_tasks_status ON crm_tasks(status);
+
+-- ── Stripe snapshot cache (refreshable from API) ──────────────────
+CREATE TABLE IF NOT EXISTS stripe_customers (
+  id TEXT PRIMARY KEY,             -- cus_...
+  email TEXT,
+  name TEXT,
+  phone TEXT,
+  balance INTEGER,                 -- unpaid in minor units
+  currency TEXT,
+  delinquent INTEGER DEFAULT 0,
+  created_at INTEGER,              -- unix from stripe
+  synced_at INTEGER NOT NULL       -- unix when we last refreshed
+);
+
+CREATE TABLE IF NOT EXISTS stripe_subscriptions (
+  id TEXT PRIMARY KEY,             -- sub_...
+  customer_id TEXT NOT NULL,
+  status TEXT NOT NULL,            -- active / trialing / canceled / past_due / unpaid
+  price_id TEXT,
+  product_id TEXT,
+  interval TEXT,                   -- month / year
+  amount INTEGER,                  -- minor units per interval
+  currency TEXT,
+  current_period_start INTEGER,
+  current_period_end INTEGER,
+  cancel_at INTEGER,
+  canceled_at INTEGER,
+  trial_end INTEGER,
+  synced_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stripe_subs_cust ON stripe_subscriptions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_stripe_subs_status ON stripe_subscriptions(status);
+
+CREATE TABLE IF NOT EXISTS stripe_invoices (
+  id TEXT PRIMARY KEY,             -- in_...
+  customer_id TEXT,
+  subscription_id TEXT,
+  status TEXT,                     -- draft / open / paid / uncollectible / void
+  amount_due INTEGER,
+  amount_paid INTEGER,
+  amount_remaining INTEGER,
+  currency TEXT,
+  number TEXT,
+  hosted_invoice_url TEXT,
+  invoice_pdf TEXT,
+  paid_at INTEGER,
+  created_at INTEGER,
+  period_start INTEGER,
+  period_end INTEGER,
+  synced_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stripe_invoices_cust ON stripe_invoices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_stripe_invoices_status ON stripe_invoices(status);
+
+CREATE TABLE IF NOT EXISTS stripe_charges (
+  id TEXT PRIMARY KEY,             -- ch_...
+  customer_id TEXT,
+  invoice_id TEXT,
+  amount INTEGER,
+  currency TEXT,
+  status TEXT,                     -- succeeded / failed / pending
+  failure_code TEXT,
+  failure_message TEXT,
+  refunded INTEGER DEFAULT 0,
+  amount_refunded INTEGER DEFAULT 0,
+  receipt_url TEXT,
+  created_at INTEGER,
+  synced_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stripe_charges_cust ON stripe_charges(customer_id);
+CREATE INDEX IF NOT EXISTS idx_stripe_charges_status ON stripe_charges(status);
+
+-- ── Hetzner snapshot cache (live server state) ─────────────────────
+CREATE TABLE IF NOT EXISTS hetzner_servers (
+  id INTEGER PRIMARY KEY,          -- hetzner server id
+  tenant_id TEXT,                  -- back-ref (FK soft — may be null for dev box)
+  name TEXT,
+  status TEXT,                     -- running / off / deleting / etc.
+  server_type TEXT,                -- cpx22, cpx32, cx43…
+  vcpus INTEGER,
+  memory_gb INTEGER,
+  disk_gb INTEGER,
+  datacenter TEXT,                 -- nbg1, hel1, etc.
+  ipv4 TEXT,
+  ipv6 TEXT,
+  created_at INTEGER,              -- unix from hetzner
+  synced_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hetzner_snapshots (
+  id INTEGER PRIMARY KEY,          -- image id on hetzner
+  server_id INTEGER,
+  server_name TEXT,
+  description TEXT,
+  image_size_gb REAL,
+  created_at INTEGER,
+  synced_at INTEGER NOT NULL
+);
+
+-- ── Audit log — every admin mutation ───────────────────────────────
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor TEXT NOT NULL,             -- 'craig' / admin username / 'system'
+  action TEXT NOT NULL,            -- 'tenant.pause' / 'sub.cancel' / 'note.create'
+  target_type TEXT,                -- 'tenant' / 'customer' / 'subscription' / 'system'
+  target_id TEXT,
+  detail TEXT,                     -- free-form or JSON
+  ip TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor);
+CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+-- ── Usage / activity ───────────────────────────────────────────────
+-- Simple counters per tenant + event log. Activity rows can come from
+-- the tenant's OpenClaw box via SSH poller, from webhook events, or
+-- from manual admin actions.
+CREATE TABLE IF NOT EXISTS tenant_activity (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  kind TEXT NOT NULL,              -- 'login' / 'api_call' / 'skill_install' / 'agent_run'
+  detail TEXT,
+  ts TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_activity_tenant ON tenant_activity(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_activity_kind ON tenant_activity(kind);
+
+-- ── Support tickets (lean) ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT,
+  customer_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT,
+  status TEXT NOT NULL DEFAULT 'open',  -- open / in_progress / waiting / closed
+  priority TEXT NOT NULL DEFAULT 'normal',
+  assigned_to TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+
+-- ── Feature flags (per-tenant overrides) ───────────────────────────
+CREATE TABLE IF NOT EXISTS feature_flags (
+  tenant_id TEXT NOT NULL,
+  flag TEXT NOT NULL,              -- 'beta.integrations' / 'agency.custom_model'
+  enabled INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, flag)
+);
+
+-- ── GDPR / data subject requests ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS gdpr_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  kind TEXT NOT NULL,              -- 'export' / 'delete'
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending / completed / rejected
+  requested_at TEXT NOT NULL,
+  completed_at TEXT,
+  output_path TEXT                 -- path to the generated export if any
+);

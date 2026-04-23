@@ -104,6 +104,42 @@ footer a:hover{color:var(--cyan)}
     <p class="muted">No servers on this account yet. Waiting on a provisioning email? It usually arrives within 10 minutes of purchase — check your spam folder.</p>
   </div>
 
+  <h2 style="font-size:18px;margin:32px 0 14px">Invoices</h2>
+  <div id="invoicesList"></div>
+  <div id="noInvoices" class="card hidden"><p class="muted">No invoices on file yet.</p></div>
+
+  <h2 style="font-size:18px;margin:32px 0 14px">Company profile</h2>
+  <div class="card">
+    <p class="muted" style="margin-bottom:16px">Used on invoices and for support. Fields are optional — fill in as much as you want.</p>
+    <form id="profileForm">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <input name="company_name" placeholder="Company name">
+        <input name="contact_name" placeholder="Your full name">
+        <input name="job_title" placeholder="Your job title">
+        <input name="phone" placeholder="Phone">
+        <input name="website" placeholder="Company website (https://…)">
+        <input name="industry" placeholder="Industry">
+        <input name="vat_number" placeholder="VAT / tax number">
+        <input name="country" placeholder="Country">
+      </div>
+      <textarea name="billing_address" placeholder="Billing address" style="width:100%;margin-top:10px;padding:12px 14px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--fg);font:inherit;font-size:14px;min-height:72px;resize:vertical"></textarea>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--muted);font-size:13px;cursor:pointer">
+        <input type="checkbox" name="consent_marketing"> Email me occasional product updates (≤ 1/month)
+      </label>
+      <div style="margin-top:14px"><button type="submit" class="btn btn-ghost">Save profile</button> <span id="profileStatus" style="margin-left:10px;font-size:13px;color:var(--muted)"></span></div>
+    </form>
+  </div>
+
+  <h2 style="font-size:18px;margin:32px 0 14px">Contact support</h2>
+  <div class="card">
+    <p class="muted" style="margin-bottom:14px">Open a support ticket — we reply to <code>hello@opspocket.com</code> inbox + log it here.</p>
+    <form id="supportForm">
+      <input id="supportSubject" placeholder="Subject (short summary)" required style="margin-bottom:10px">
+      <textarea id="supportBody" placeholder="What's going on?" required style="width:100%;padding:12px 14px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--fg);font:inherit;font-size:14px;min-height:100px;resize:vertical"></textarea>
+      <div style="margin-top:10px"><button type="submit" class="btn">Send</button> <span id="supportStatus" style="margin-left:10px;font-size:13px;color:var(--muted)"></span></div>
+    </form>
+  </div>
+
 </section>
 
 <!-- ── Verifying-token view ─────────────────────────────────────── -->
@@ -205,6 +241,8 @@ async function renderDashboard(data){
   $('welcomeSub').textContent = 'Signed in as ' + data.email;
   $('navEmail').textContent = data.email;
   show('logoutBtn', true);
+  loadInvoices();
+  loadProfile();
 
   const list = $('tenantsList');
   list.innerHTML = '';
@@ -273,6 +311,84 @@ $('portalBtn').addEventListener('click', async () => {
 $('logoutBtn').addEventListener('click', async () => {
   await api('/api/account/logout', { method: 'POST' });
   location.reload();
+});
+
+// ── Invoices ────────────────────────────────────────────────────
+async function loadInvoices(){
+  const r = await api('/api/account/invoices');
+  if (!r.ok) return;
+  const list = document.getElementById('invoicesList');
+  const none = document.getElementById('noInvoices');
+  list.innerHTML = '';
+  const invoices = r.data.invoices || [];
+  if (!invoices.length) { none.classList.remove('hidden'); return; }
+  none.classList.add('hidden');
+  for (const i of invoices) {
+    const amount = (i.amount_paid || 0) / 100;
+    const currency = (i.currency || 'gbp').toUpperCase();
+    const status = i.status || '—';
+    const statusClass = 'badge-' + status;
+    const createdAt = i.created_at ? new Date(i.created_at * 1000).toLocaleDateString() : '';
+    const card = document.createElement('div');
+    card.className = 'tenant';
+    card.innerHTML = `
+      <div class="tenant-head">
+        <div>
+          <div class="tenant-title">${i.number || i.id.slice(0,12)}</div>
+          <div class="muted" style="font-size:12px">${createdAt} · ${currency} ${amount.toFixed(2)}</div>
+        </div>
+        <span class="badge ${statusClass}">${status}</span>
+      </div>
+      ${i.hosted_invoice_url ? `<div class="row"><a href="${i.hosted_invoice_url}" target="_blank" rel="noopener" class="btn btn-ghost btn-small">View invoice →</a> ${i.invoice_pdf ? `<a href="${i.invoice_pdf}" target="_blank" rel="noopener" class="btn btn-ghost btn-small">Download PDF</a>` : ''}</div>` : ''}
+    `;
+    list.appendChild(card);
+  }
+}
+
+// ── Profile ────────────────────────────────────────────────────
+async function loadProfile(){
+  const r = await api('/api/account/profile');
+  if (!r.ok) return;
+  const form = document.getElementById('profileForm');
+  for (const el of form.elements) {
+    if (el.name && r.data[el.name] != null) {
+      if (el.type === 'checkbox') el.checked = !!r.data[el.name];
+      else el.value = r.data[el.name];
+    }
+  }
+}
+
+document.getElementById('profileForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {};
+  for (const el of e.target.elements) {
+    if (!el.name) continue;
+    data[el.name] = el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value.trim();
+  }
+  const r = await api('/api/account/profile', { method: 'POST', body: JSON.stringify(data) });
+  document.getElementById('profileStatus').textContent = r.ok ? '✓ Saved' : 'Failed';
+  setTimeout(() => document.getElementById('profileStatus').textContent = '', 3000);
+});
+
+// ── Support ────────────────────────────────────────────────────
+document.getElementById('supportForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const subject = document.getElementById('supportSubject').value.trim();
+  const body = document.getElementById('supportBody').value.trim();
+  if (!subject) return;
+  const r = await api('/api/account/support', {
+    method: 'POST',
+    body: JSON.stringify({ subject, body }),
+  });
+  const status = document.getElementById('supportStatus');
+  if (r.ok) {
+    status.textContent = '✓ Ticket created — we\'ll reply by email';
+    document.getElementById('supportSubject').value = '';
+    document.getElementById('supportBody').value = '';
+  } else {
+    status.textContent = 'Failed: ' + (r.data.error || '');
+  }
+  setTimeout(() => status.textContent = '', 4000);
 });
 </script>
 

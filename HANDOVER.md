@@ -129,7 +129,156 @@ Chronological, newest last:
 
 ---
 
-## SaaS CRM — shipped 2026-04-23 ✅
+## SaaS CRM v2 — full CRM shipped 2026-04-23 ✅✅
+
+On top of the earlier self-serve + admin + pair work, the platform now has a **real CRM**: Stripe + Hetzner data synced locally, per-tenant deep drawer, notes/tasks, audit log, analytics dashboard, customer profile editing, and in-app support tickets.
+
+### Data sources + sync
+
+- **Stripe live data** is pulled into `stripe_customers`, `stripe_subscriptions`, `stripe_invoices`, `stripe_charges` tables. `POST /api/admin/sync/stripe` refreshes from the API. Module: `infra/backend/sync_stripe.py`.
+- **Hetzner live data** is pulled into `hetzner_servers` and `hetzner_snapshots`. `POST /api/admin/sync/hetzner` refreshes. Module: `infra/backend/sync_hetzner.py`.
+- Both can be triggered from the admin panel's header buttons. Every sync is audit-logged with counts.
+
+### New tables (12 in total)
+
+```
+customers           — company profile + CRM lifecycle + health score
+crm_notes           — free-form notes, pinnable, per tenant or customer
+crm_tasks           — admin task list with priority + owner
+stripe_customers    — cache of Stripe customer objects
+stripe_subscriptions— cache of all subs incl. cancelled
+stripe_invoices     — cache for billing history in /account
+stripe_charges      — cache for failed-payments visibility
+hetzner_servers     — live server specs + status
+hetzner_snapshots   — backup inventory
+audit_log           — every admin mutation (actor, action, target, IP, detail)
+tenant_activity     — future-proof usage event log
+support_tickets     — customer-created tickets (email on create)
+feature_flags       — per-tenant enable/disable
+gdpr_requests       — data subject requests
+```
+
+### API surface — new endpoints on top of v1
+
+```
+GET  /api/admin/tenants/<id>            — deep detail: tenant + Stripe + Hetzner + notes/tasks/audit
+GET  /api/admin/tenants/<id>/notes
+GET  /api/admin/tenants/<id>/tasks
+GET  /api/admin/tenants/<id>/activity
+GET  /api/admin/customers
+POST /api/admin/customers               — upsert CRM profile
+GET  /api/admin/audit?limit=N
+GET  /api/admin/analytics               — MRR/ARR/churn/failed-payments/tenant-status
+GET  /api/admin/support
+GET  /api/admin/tasks
+POST /api/admin/sync/stripe
+POST /api/admin/sync/hetzner
+POST /api/admin/notes
+POST /api/admin/tasks
+POST /api/admin/tasks/<id>/complete
+POST /api/admin/tenants/<id>/impersonate   — issue magic-link as that customer
+POST /api/admin/tenants/<id>/cancel        — cancel Stripe subscription immediately
+POST /api/admin/tenants/<id>/flags         — set feature flag
+
+GET  /api/account/profile               — customer's CRM profile
+POST /api/account/profile               — self-edit
+GET  /api/account/invoices              — billing history from cache
+POST /api/account/support               — create support ticket + email ops
+```
+
+### Admin UI — new `/admin` capabilities
+
+Single-page app with 7 tabs:
+1. **Dashboard** — live MRR/ARR, active/trialing/past_due/cancelled counts, failed-payment total, 30-day trials + churn, waitlist, tenant-status breakdown
+2. **Tenants** — filterable table; click a row to open a full detail drawer
+3. **Customers** — CRM list (company / lifecycle / health score / tenant count)
+4. **Tasks** — all open tasks across all customers, priority-sorted
+5. **Support** — ticket queue, status-sorted
+6. **Waitlist** — pre-signup emails
+7. **Audit** — full actor/action/target/IP/detail log
+
+**Tenant detail drawer** (click any tenant):
+- Overview (tier, status, domain, created)
+- **Actions row**: impersonate, new pair code, cancel subscription, toggle flags
+- Billing block: customer, subscription, invoices table, charges table
+- Infrastructure block: server type + specs + datacenter + snapshot count
+- CRM profile block with one-click edit
+- Notes list (add pinned or normal)
+- Tasks list (add + complete)
+- Audit trail scoped to this tenant
+
+Header has **Sync Stripe** + **Sync Hetzner** buttons for on-demand refresh.
+
+### Customer UI — new `/account` capabilities
+
+- **Your servers** tiles with pair-code generator + Open UI link
+- **Billing portal** one-click Stripe Customer Portal session
+- **Invoices** list pulled from local Stripe cache — PDF + hosted URL links
+- **Company profile** form — 9 editable fields (company, contact, phone, website, industry, VAT, country, billing address, marketing consent) — saved to `customers` table
+- **Contact support** form — creates a ticket + emails `hello@opspocket.com`
+
+### End-to-end validated on 2026-04-23
+
+```
+✅ POST /api/account/login         → magic-link email sent via Resend
+✅ GET  /api/account/verify?token= → session cookie issued
+✅ POST /api/account/profile       → customers row upserted
+✅ GET  /api/account/profile       → roundtrip returns saved fields
+✅ POST /api/account/support       → ticket created, ops email fired
+✅ POST /api/admin/sync/stripe     → 1 customer + 1 invoice + 1 charge pulled
+✅ POST /api/admin/sync/hetzner    → 1 server + 2 snapshots pulled
+✅ GET  /api/admin/analytics       → MRR/ARR/churn computed from cache
+✅ GET  /api/admin/tenants/:id     → full deep view with all joined data
+✅ POST /api/admin/notes           → note written + audited
+✅ POST /api/admin/tasks           → task written + audited
+✅ POST /api/admin/tasks/:id/complete → status updated + audited
+✅ POST /api/admin/tenants/:id/impersonate → magic-link URL returned
+✅ POST /api/admin/tenants/:id/flags → feature flag toggled + audited
+✅ GET  /api/admin/audit           → 4+ audit events captured
+✅ Admin UI loads, all 7 tabs functional
+✅ Customer UI loads, profile/invoices/support all functional
+```
+
+### What's NOT built (explicit phase-2 list)
+
+These were in the spec but deliberately scoped out — each with rationale:
+
+- **Full sales pipeline (deals/stages/proposal tracking)** — zero paying customers today; CRM lifecycle field + notes cover current needs. Re-evaluate at 20+ customers.
+- **SMS/WhatsApp/call-log integration** — overkill for founder-led support; email + internal notes do the job at current scale.
+- **Marketing email campaigns + sequences** — Resend is set up for transactional; marketing sends would add compliance burden without clear payoff yet.
+- **Meeting scheduler / calendar** — Calendly link in email signature is sufficient.
+- **Contract/NDA/proposal document management** — drop files into Google Drive; add document vault if/when it becomes a friction point.
+- **SLA response-time tracking** — tickets exist, but no automated SLA timer yet.
+- **Chat transcript storage** — no live chat; email-only support.
+- **Real-time presence** — active sessions list is sufficient.
+- **User impersonation with full UI takeover** — current impersonation issues a customer magic-link; sufficient for support.
+- **Full MFA for admin** — Caddy basic_auth is single-founder; add TOTP when team grows.
+- **Per-user roles inside customer accounts** — customers today have one login per email; seat management UI is phase-2 when we support teams.
+- **Integrations marketplace (Slack/Discord/Telegram wiring)** — re-visit once 5+ paying customers are asking for it.
+- **Shared-host Docker pivot** — per-VPS stays until 5+ paying customers.
+
+### Files added / modified — summary
+
+**Backend (`infra/backend/`):**
+- `schema.sql` — extended from 5 → 19 tables
+- `api_extras.py` — ~1,400 lines (from ~600) covering all new endpoints
+- `sync_stripe.py` — **new** (~250 lines)
+- `sync_hetzner.py` — **new** (~160 lines)
+- `app.py` — unchanged except dispatch wiring
+
+**Frontend (`site-v2/`):**
+- `admin.html` — full rewrite: 7-tab SPA + tenant drawer + sync/action buttons (~600 lines)
+- `account.html` — expanded: invoices + profile + support (~480 lines)
+
+### Admin + test credentials
+
+- Admin: `craig` / `OMfZQSbUT89Nz5k4xv` at `https://opspocket.com/admin`
+- Test customer used in verification: `findgriff+crmtest@gmail.com` (created in customers table via magic-link flow)
+- Rotate admin password: `ssh dev 'caddy hash-password --plaintext "NEW"'` then update `infra/caddy-sites/opspocket.caddy` + `systemctl reload caddy`.
+
+---
+
+## SaaS CRM v1 — shipped 2026-04-23 ✅
 
 **The three biggest unblocked items from the blocked-saas-ui spec are now live.** Every Cloud customer now has a working self-service account; every founder-side operation is now visible in the admin panel; every welcome email now carries a one-tap iPhone deep-link that auto-configures the OpsPocket app.
 

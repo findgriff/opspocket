@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpsPocket · Admin</title>
+<title>OpsPocket · Control Room</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -14,93 +14,188 @@
   --fg:#F5F5F7;--muted:#9AA0A6;--accent:#FF3B1F;--cyan:#00E6FF;
   --green:#4CAF50;--amber:#FFB800;--purple:#B57BFF;
 }
-html,body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh}
-.mono,code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
+html,body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh;font-size:14px;line-height:1.45}
+.mono,code{font-family:'JetBrains Mono',ui-monospace,monospace}
 a{color:var(--cyan);text-decoration:none}
 a:hover{text-decoration:underline}
 .nav{position:sticky;top:0;background:rgba(10,10,11,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:10}
-.nav-inner{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.nav-inner{max-width:1400px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
 .brand{font-weight:800;display:flex;align-items:center;gap:8px;color:var(--fg)}
 .brand-dot{width:8px;height:8px;background:var(--purple);border-radius:50%;box-shadow:0 0 12px var(--purple)}
 .brand-admin{font-size:11px;color:var(--purple);background:rgba(181,123,255,.12);padding:3px 8px;border-radius:999px;margin-left:8px;font-weight:700;letter-spacing:0.06em}
-.wrap{max-width:1200px;margin:0 auto;padding:32px 24px 96px}
-h1{font-size:30px;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px}
-.sub{color:var(--muted);margin-bottom:32px}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
-.tab{padding:12px 20px;background:none;border:0;color:var(--muted);font:inherit;font-weight:600;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nav-actions{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.btn{padding:7px 14px;background:transparent;border:1px solid var(--border);color:var(--fg);border-radius:6px;font:inherit;font-size:13px;cursor:pointer;transition:border-color 0.12s}
+.btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{opacity:0.9;border-color:var(--accent);color:#fff}
+.btn-danger{border-color:var(--accent);color:var(--accent)}
+.btn-danger:hover{background:rgba(255,59,31,0.1);border-color:var(--accent);color:var(--accent)}
+.btn-ghost{background:transparent}
+.btn-small{padding:4px 10px;font-size:12px}
+.wrap{max-width:1400px;margin:0 auto;padding:24px 24px 80px}
+h1{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin-bottom:6px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px;flex-wrap:wrap}
+.tab{padding:10px 18px;background:none;border:0;color:var(--muted);font:inherit;font-weight:600;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab.active{color:var(--fg);border-bottom-color:var(--purple)}
 .tab:hover:not(.active){color:var(--fg)}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:28px}
-.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
-.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
-.stat-value{font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace}
-.stat-value.green{color:var(--green)} .stat-value.amber{color:var(--amber)} .stat-value.red{color:var(--accent)}
-table{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:10px;border-collapse:collapse;overflow:hidden}
-th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
-th{background:var(--panel-2);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;font-size:11px}
-td.mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
+.pane{display:none}.pane.active{display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:22px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:6px}
+.stat-value{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.stat-value.green{color:var(--green)}.stat-value.amber{color:var(--amber)}.stat-value.red{color:var(--accent)}.stat-value.cyan{color:var(--cyan)}
+table{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:10px;border-collapse:collapse;overflow:hidden;font-size:12px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+th{background:var(--panel-2);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;font-size:10px}
+td.mono{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
 tr:last-child td{border-bottom:0}
-tr:hover{background:var(--panel-2)}
+tr:hover{background:var(--panel-2);cursor:pointer}
+tr.non-clickable{cursor:default}
+tr.non-clickable:hover{background:transparent}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em}
-.badge-active{background:rgba(76,175,80,.15);color:var(--green)}
-.badge-pending,.badge-provisioning{background:rgba(255,184,0,.15);color:var(--amber)}
-.badge-failed{background:rgba(255,59,31,.15);color:var(--accent)}
-.badge-cancelled,.badge-test-cleanup{background:rgba(154,160,166,.15);color:var(--muted)}
-.btn{padding:5px 10px;background:transparent;border:1px solid var(--border);color:var(--fg);border-radius:6px;font:inherit;font-size:12px;cursor:pointer}
-.btn:hover{border-color:var(--cyan);color:var(--cyan)}
-.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:12px}
-.refresh{background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
-.refresh:hover{color:var(--fg)}
-.pane{display:none}
-.pane.active{display:block}
-.pair-modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:50;padding:24px}
-.pair-modal.open{display:flex}
-.pair-card{background:var(--panel);border:1px solid var(--purple);border-radius:12px;padding:28px;max-width:520px;width:100%}
-.pair-card h3{font-size:18px;margin-bottom:12px}
-.pair-card code{display:block;background:#000;padding:12px;border-radius:6px;word-break:break-all;margin:10px 0;color:var(--cyan);font-size:12px}
-.pair-card .close{float:right;background:transparent;border:0;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+.badge-active,.badge-paid,.badge-succeeded{background:rgba(76,175,80,.15);color:var(--green)}
+.badge-pending,.badge-provisioning,.badge-trialing,.badge-open,.badge-draft,.badge-waiting{background:rgba(255,184,0,.15);color:var(--amber)}
+.badge-failed,.badge-past_due,.badge-uncollectible,.badge-high{background:rgba(255,59,31,.15);color:var(--accent)}
+.badge-cancelled,.badge-canceled,.badge-test-cleanup,.badge-closed,.badge-done,.badge-normal{background:rgba(154,160,166,.15);color:var(--muted)}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.toolbar .grow{flex:1}
+.toolbar .mono{color:var(--muted);font-size:12px}
+/* Detail drawer */
+.drawer{position:fixed;right:0;top:0;bottom:0;width:780px;max-width:96vw;background:var(--bg);border-left:1px solid var(--border);transform:translateX(100%);transition:transform 0.25s;z-index:100;overflow-y:auto;box-shadow:-20px 0 60px rgba(0,0,0,0.6)}
+.drawer.open{transform:translateX(0)}
+.drawer-header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;justify-content:space-between;align-items:center;z-index:1}
+.drawer-header h2{font-size:16px;font-weight:700}
+.drawer-header .close{background:transparent;border:0;color:var(--muted);font-size:22px;cursor:pointer}
+.drawer-body{padding:24px}
+.drawer-section{margin-bottom:28px}
+.drawer-section h3{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:6px 16px;font-size:12px}
+.kv .k{color:var(--muted)}
+.kv .v{color:var(--fg);font-family:'JetBrains Mono',monospace;word-break:break-all}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;font-size:12px}
+.card.pinned{border-color:var(--purple)}
+.card .card-meta{font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em}
+.form-row{display:flex;gap:8px;margin-bottom:10px}
+.form-row input,.form-row textarea,.form-row select{flex:1;padding:8px 10px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font:inherit;font-size:13px}
+.form-row input:focus,.form-row textarea:focus,.form-row select:focus{outline:none;border-color:var(--cyan)}
+.form-row textarea{min-height:60px;resize:vertical}
+.action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+.action-grid button{text-align:left;padding:10px 12px;font-size:12px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--panel);border:1px solid var(--green);color:var(--green);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,0.4);opacity:0;transition:opacity 0.2s;z-index:200}
+.toast.show{opacity:1}
+.toast.err{border-color:var(--accent);color:var(--accent)}
+.empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.5);opacity:0;transition:opacity 0.2s;pointer-events:none;z-index:99}
+.backdrop.show{opacity:1;pointer-events:auto}
 </style>
 </head>
 <body>
 
 <nav class="nav"><div class="nav-inner">
-  <div class="brand"><span class="brand-dot"></span>OpsPocket <span class="brand-admin">ADMIN</span></div>
-  <div><a href="/" style="color:var(--muted);font-size:13px">← public site</a></div>
+  <div class="brand"><span class="brand-dot"></span>OpsPocket <span class="brand-admin">CONTROL ROOM</span></div>
+  <div class="nav-actions">
+    <button class="btn btn-small" onclick="syncStripe()">↻ Sync Stripe</button>
+    <button class="btn btn-small" onclick="syncHetzner()">↻ Sync Hetzner</button>
+    <a href="/" style="color:var(--muted);font-size:12px;margin-left:10px">← public site</a>
+  </div>
 </div></nav>
 
 <main class="wrap">
 
 <h1>Control Room</h1>
-<p class="sub">Internal. For founders + ops. Everything mutable lives here.</p>
-
-<div class="stats" id="stats"></div>
+<p class="sub">Single surface for tenants, billing, infrastructure, CRM, ops.</p>
 
 <div class="tabs">
-  <button class="tab active" data-pane="tenantsPane">Tenants</button>
+  <button class="tab active" data-pane="dashPane">Dashboard</button>
+  <button class="tab" data-pane="tenantsPane">Tenants</button>
+  <button class="tab" data-pane="customersPane">Customers</button>
+  <button class="tab" data-pane="tasksPane">Tasks</button>
+  <button class="tab" data-pane="supportPane">Support</button>
   <button class="tab" data-pane="waitlistPane">Waitlist</button>
-  <button class="tab" data-pane="sessionsPane">Active sessions</button>
+  <button class="tab" data-pane="auditPane">Audit</button>
+</div>
+
+<!-- ── Dashboard ────────────────────────────────────────────────── -->
+<div class="pane active" id="dashPane">
+  <div class="stats" id="analyticsStats"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div>
+      <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Tenant status</h3>
+      <table>
+        <thead><tr><th>Status</th><th>Count</th></tr></thead>
+        <tbody id="tenantStatusBody"></tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Subscriptions</h3>
+      <table>
+        <thead><tr><th>Status</th><th>Count</th></tr></thead>
+        <tbody id="subStatusBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- ── Tenants ──────────────────────────────────────────────────── -->
-<div class="pane active" id="tenantsPane">
+<div class="pane" id="tenantsPane">
   <div class="toolbar">
-    <button class="refresh" onclick="loadTenants()">↻ Refresh</button>
-    <span class="mono" style="color:var(--muted)" id="tenantCount"></span>
+    <button class="btn btn-small" onclick="loadTenants()">↻ Refresh</button>
+    <span class="mono" id="tenantCount"></span>
+    <span class="grow"></span>
+    <input id="tenantSearch" placeholder="Filter by email or domain" style="padding:7px 10px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--fg);font:inherit;font-size:12px">
   </div>
   <table>
     <thead><tr>
       <th>ID</th><th>Customer</th><th>Tier</th><th>Domain</th>
-      <th>IP</th><th>Status</th><th>Created</th><th>Actions</th>
+      <th>IP</th><th>Status</th><th>Created</th><th></th>
     </tr></thead>
     <tbody id="tenantsBody"></tbody>
+  </table>
+</div>
+
+<!-- ── Customers ────────────────────────────────────────────────── -->
+<div class="pane" id="customersPane">
+  <div class="toolbar">
+    <button class="btn btn-small" onclick="loadCustomers()">↻ Refresh</button>
+    <span class="mono" id="customerCount"></span>
+  </div>
+  <table>
+    <thead><tr><th>Email</th><th>Company</th><th>Contact</th><th>Lifecycle</th><th>Health</th><th>Tenants</th><th>Owner</th></tr></thead>
+    <tbody id="customersBody"></tbody>
+  </table>
+</div>
+
+<!-- ── Tasks ────────────────────────────────────────────────────── -->
+<div class="pane" id="tasksPane">
+  <div class="toolbar">
+    <button class="btn btn-small" onclick="loadAllTasks()">↻ Refresh</button>
+    <span class="mono" id="taskCount"></span>
+  </div>
+  <table>
+    <thead><tr><th>Status</th><th>Priority</th><th>Title</th><th>Tenant/Email</th><th>Due</th><th>Owner</th><th></th></tr></thead>
+    <tbody id="tasksBody"></tbody>
+  </table>
+</div>
+
+<!-- ── Support ──────────────────────────────────────────────────── -->
+<div class="pane" id="supportPane">
+  <div class="toolbar">
+    <button class="btn btn-small" onclick="loadSupport()">↻ Refresh</button>
+    <span class="mono" id="supportCount"></span>
+  </div>
+  <table>
+    <thead><tr><th>Status</th><th>Priority</th><th>Subject</th><th>Email</th><th>Created</th></tr></thead>
+    <tbody id="supportBody"></tbody>
   </table>
 </div>
 
 <!-- ── Waitlist ─────────────────────────────────────────────────── -->
 <div class="pane" id="waitlistPane">
   <div class="toolbar">
-    <button class="refresh" onclick="loadWaitlist()">↻ Refresh</button>
-    <span class="mono" style="color:var(--muted)" id="waitlistCount"></span>
+    <button class="btn btn-small" onclick="loadWaitlist()">↻ Refresh</button>
+    <span class="mono" id="waitlistCount"></span>
   </div>
   <table>
     <thead><tr><th>When</th><th>Email</th><th>Tier</th></tr></thead>
@@ -108,142 +203,400 @@ tr:hover{background:var(--panel-2)}
   </table>
 </div>
 
-<!-- ── Active sessions ───────────────────────────────────────────── -->
-<div class="pane" id="sessionsPane">
+<!-- ── Audit log ────────────────────────────────────────────────── -->
+<div class="pane" id="auditPane">
   <div class="toolbar">
-    <button class="refresh" onclick="loadSessions()">↻ Refresh</button>
-    <span class="mono" style="color:var(--muted)" id="sessionsCount"></span>
+    <button class="btn btn-small" onclick="loadAudit()">↻ Refresh</button>
+    <span class="mono" id="auditCount"></span>
   </div>
   <table>
-    <thead><tr><th>Email</th><th>Signed in</th><th>Expires</th></tr></thead>
-    <tbody id="sessionsBody"></tbody>
+    <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>
+    <tbody id="auditBody"></tbody>
   </table>
 </div>
 
 </main>
 
-<div class="pair-modal" id="pairModal">
-  <div class="pair-card">
-    <button class="close" onclick="document.getElementById('pairModal').classList.remove('open')">&times;</button>
-    <h3>Fresh pair code</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Send this to the customer — one-tap deep-link for their iPhone:</p>
-    <code id="pairDeepLink"></code>
-    <p style="color:var(--muted);font-size:12px">Expires in <span id="pairExpiry"></span> days. Single-use.</p>
+<!-- ── Tenant detail drawer ─────────────────────────────────────── -->
+<div class="backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <h2 id="drawerTitle">Tenant</h2>
+    <button class="close" onclick="closeDrawer()">&times;</button>
   </div>
+  <div class="drawer-body" id="drawerBody"></div>
 </div>
 
+<div id="toast" class="toast"></div>
+
 <script>
-async function api(path, opts={}){
-  const res = await fetch(path, Object.assign({
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-  }, opts));
-  let data = {};
-  try { data = await res.json(); } catch(_){}
-  return { ok: res.ok, status: res.status, data };
+const $=s=>document.querySelector(s);
+const $$=s=>document.querySelectorAll(s);
+function toast(msg,err){const t=$("#toast");t.textContent=msg;t.className="toast show"+(err?" err":"");setTimeout(()=>t.classList.remove("show"),2500)}
+async function api(path,opts={}){
+  const res=await fetch(path,Object.assign({credentials:'include',headers:{'Content-Type':'application/json','Accept':'application/json'}},opts));
+  let data={};try{data=await res.json()}catch(_){}
+  return{ok:res.ok,status:res.status,data}
 }
+function esc(s){if(s==null)return '';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])}
+function money(minor,currency){if(minor==null)return '—';return (currency||'gbp').toUpperCase()+' '+(minor/100).toFixed(2)}
+function fmtDate(s){if(!s)return '—';const d=typeof s==='number'?new Date(s*1000):new Date(s);return d.toLocaleString()}
+function badge(s){return `<span class="badge badge-${esc(s)}">${esc(s)}</span>`}
 
 // Tabs
-document.querySelectorAll('.tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
-    document.getElementById(t.dataset.pane).classList.add('active');
-  });
-});
+$$(".tab").forEach(t=>t.addEventListener("click",()=>{
+  $$(".tab").forEach(x=>x.classList.remove("active"));t.classList.add("active");
+  $$(".pane").forEach(x=>x.classList.remove("active"));$("#"+t.dataset.pane).classList.add("active");
+  if(t.dataset.pane==="customersPane")loadCustomers();
+  if(t.dataset.pane==="tasksPane")loadAllTasks();
+  if(t.dataset.pane==="supportPane")loadSupport();
+  if(t.dataset.pane==="waitlistPane")loadWaitlist();
+  if(t.dataset.pane==="auditPane")loadAudit();
+}));
 
-// ── Tenants ─────────────────────────────────────────────────────
-async function loadTenants(){
-  const r = await api('/api/admin/tenants');
-  if (!r.ok) { alert('Failed: ' + (r.data.error || r.status)); return; }
-  const tb = document.getElementById('tenantsBody');
-  tb.innerHTML = '';
-  document.getElementById('tenantCount').textContent = r.data.count + ' tenant' + (r.data.count === 1 ? '' : 's');
-
-  // Stats
-  const byStatus = {};
-  for (const t of r.data.tenants) byStatus[t.status] = (byStatus[t.status] || 0) + 1;
-  const statsEl = document.getElementById('stats');
-  statsEl.innerHTML = '';
-  const statOrder = [
-    ['Total', r.data.count, ''],
-    ['Active', byStatus.active || 0, 'green'],
-    ['Provisioning', (byStatus.provisioning || 0) + (byStatus.pending || 0), 'amber'],
-    ['Failed', byStatus.failed || 0, 'red'],
-    ['Cancelled/test', (byStatus.cancelled || 0) + (byStatus['test-cleanup'] || 0), ''],
+// ── Dashboard ────────────────────────────────────────────────────
+async function loadDashboard(){
+  const r=await api("/api/admin/analytics");if(!r.ok)return;
+  const a=r.data;
+  const s=$("#analyticsStats");s.innerHTML="";
+  const cards=[
+    ["MRR", "£"+a.mrr_pounds.toFixed(2), "cyan"],
+    ["ARR", "£"+a.arr_pounds.toFixed(2), "cyan"],
+    ["Active subs", a.subscriptions.active, "green"],
+    ["Trialing", a.subscriptions.trialing, "amber"],
+    ["Past due", a.subscriptions.past_due, a.subscriptions.past_due?"red":""],
+    ["Cancelled", a.subscriptions.cancelled, ""],
+    ["Failed payments", a.failed_payments_total, a.failed_payments_total?"red":""],
+    ["Total paid", "£"+a.total_paid_pounds.toFixed(2), "green"],
+    ["New trials 30d", a.new_trials_30d, ""],
+    ["Churn 30d", a.recent_churn_30d, a.recent_churn_30d?"red":""],
+    ["Waitlist", a.waitlist_count, ""],
   ];
-  for (const [label, value, cls] of statOrder) {
-    const d = document.createElement('div');
-    d.className = 'stat';
-    d.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value ${cls}">${value}</div>`;
-    statsEl.appendChild(d);
+  for(const[l,v,cls]of cards){
+    s.insertAdjacentHTML("beforeend",
+      `<div class="stat"><div class="stat-label">${esc(l)}</div><div class="stat-value ${cls}">${esc(v)}</div></div>`);
   }
-
-  for (const t of r.data.tenants) {
-    const tr = document.createElement('tr');
-    const created = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
-    tr.innerHTML = `
-      <td class="mono">${t.id.slice(0,8)}</td>
-      <td>${t.customer_email}</td>
-      <td>${t.tier}</td>
-      <td class="mono">${t.domain || '—'}</td>
-      <td class="mono">${t.hetzner_ip || '—'}</td>
-      <td><span class="badge badge-${t.status}">${t.status}</span></td>
-      <td class="mono">${created}</td>
-      <td>
-        <button class="btn" data-pair="${t.id}">Pair code</button>
-        ${t.domain ? `<a class="btn" href="https://${t.domain}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--fg)">Open UI</a>` : ''}
-      </td>
-    `;
-    tb.appendChild(tr);
+  // Tenant status + Sub status tables
+  const tb=$("#tenantStatusBody");tb.innerHTML="";
+  for(const[k,v]of Object.entries(a.tenant_status||{})){
+    tb.insertAdjacentHTML("beforeend",`<tr class="non-clickable"><td>${badge(k)}</td><td class="mono">${v}</td></tr>`);
   }
-  document.querySelectorAll('[data-pair]').forEach(b => {
-    b.addEventListener('click', async () => {
-      const tid = b.dataset.pair;
-      b.disabled = true; b.textContent = '…';
-      const r = await api('/api/admin/pair/' + tid, { method: 'POST' });
-      b.disabled = false; b.textContent = 'Pair code';
-      if (!r.ok) { alert('Failed: ' + (r.data.error || r.status)); return; }
-      document.getElementById('pairDeepLink').textContent = r.data.deep_link;
-      document.getElementById('pairExpiry').textContent = r.data.expires_in_days;
-      document.getElementById('pairModal').classList.add('open');
-    });
-  });
+  const sb=$("#subStatusBody");sb.innerHTML="";
+  for(const[k,v]of Object.entries(a.subscriptions||{})){
+    sb.insertAdjacentHTML("beforeend",`<tr class="non-clickable"><td>${badge(k)}</td><td class="mono">${v}</td></tr>`);
+  }
 }
 
-// ── Waitlist ────────────────────────────────────────────────────
+// ── Tenants ──────────────────────────────────────────────────────
+let _allTenants=[];
+async function loadTenants(){
+  const r=await api("/api/admin/tenants");if(!r.ok)return;
+  _allTenants=r.data.tenants;renderTenants();
+  $("#tenantCount").textContent=r.data.count+" tenants";
+}
+function renderTenants(){
+  const q=$("#tenantSearch").value.toLowerCase();
+  const tb=$("#tenantsBody");tb.innerHTML="";
+  const rows=_allTenants.filter(t=>!q||(t.customer_email||"").toLowerCase().includes(q)||(t.domain||"").toLowerCase().includes(q));
+  if(!rows.length){tb.innerHTML='<tr class="non-clickable"><td colspan="8" class="empty">No tenants match.</td></tr>';return}
+  for(const t of rows){
+    tb.insertAdjacentHTML("beforeend",`
+      <tr onclick="openTenant('${esc(t.id)}')">
+        <td class="mono">${esc(t.id.slice(0,8))}</td>
+        <td>${esc(t.customer_email)}</td>
+        <td>${esc(t.tier)}</td>
+        <td class="mono">${esc(t.domain||'—')}</td>
+        <td class="mono">${esc(t.hetzner_ip||'—')}</td>
+        <td>${badge(t.status)}</td>
+        <td class="mono">${fmtDate(t.created_at)}</td>
+        <td><button class="btn btn-small" onclick="event.stopPropagation();openTenant('${esc(t.id)}')">Open</button></td>
+      </tr>`);
+  }
+}
+$("#tenantSearch").addEventListener("input",renderTenants);
+
+// ── Tenant detail drawer ─────────────────────────────────────────
+async function openTenant(id){
+  $("#drawer").classList.add("open");$("#drawerBackdrop").classList.add("show");
+  $("#drawerBody").innerHTML='<div class="empty">Loading…</div>';
+  const r=await api("/api/admin/tenants/"+encodeURIComponent(id));
+  if(!r.ok){$("#drawerBody").innerHTML=`<div class="empty err">${esc(r.data.error||"error")}</div>`;return}
+  renderDrawer(r.data);
+}
+function closeDrawer(){
+  $("#drawer").classList.remove("open");$("#drawerBackdrop").classList.remove("show");
+}
+function renderDrawer(d){
+  const t=d.tenant;
+  $("#drawerTitle").textContent=`${t.tier.toUpperCase()} · ${t.customer_email}`;
+  const sub=(d.stripe_subscriptions[0]||{});
+  const hz=d.hetzner_server||{};
+  const sc=d.stripe_customer||{};
+  const cust=d.customer||{};
+  const flagsMap=Object.fromEntries(d.feature_flags.map(f=>[f.flag,f.enabled]));
+
+  $("#drawerBody").innerHTML=`
+    <div class="drawer-section">
+      <h3>Overview</h3>
+      <div class="kv">
+        <div class="k">Tenant ID</div><div class="v">${esc(t.id)}</div>
+        <div class="k">Status</div><div class="v">${badge(t.status)}</div>
+        <div class="k">Tier · Interval</div><div class="v">${esc(t.tier)} · ${esc(t.interval)}</div>
+        <div class="k">Created</div><div class="v">${fmtDate(t.created_at)}</div>
+        <div class="k">Domain</div><div class="v"><a href="https://${esc(t.domain||'')}" target="_blank">${esc(t.domain||'—')}</a></div>
+        <div class="k">Notes</div><div class="v">${esc(t.notes||'—')}</div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>Actions</h3>
+      <div class="action-grid">
+        <button class="btn btn-small" onclick="impersonate('${t.id}')">🎭 Impersonate (magic link)</button>
+        <button class="btn btn-small" onclick="mintPair('${t.id}')">📱 New pair code</button>
+        <button class="btn btn-small btn-danger" onclick="cancelSub('${t.id}')">🛑 Cancel subscription</button>
+        <button class="btn btn-small" onclick="toggleFlag('${t.id}','beta.features')">🚩 Flag: beta.features (${flagsMap['beta.features']?'on':'off'})</button>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>Billing (Stripe)</h3>
+      <div class="kv">
+        <div class="k">Stripe customer</div><div class="v">${esc(t.stripe_customer_id||'—')}</div>
+        <div class="k">Customer name</div><div class="v">${esc(sc.name||'—')}</div>
+        <div class="k">Balance</div><div class="v">${sc.balance!=null?money(sc.balance,sc.currency):'—'}</div>
+        <div class="k">Delinquent</div><div class="v">${sc.delinquent?'<span class="badge badge-failed">yes</span>':'no'}</div>
+        <div class="k">Subscription</div><div class="v">${esc(sub.id||'—')}</div>
+        <div class="k">Status</div><div class="v">${sub.status?badge(sub.status):'—'}</div>
+        <div class="k">Amount</div><div class="v">${sub.amount?money(sub.amount,sub.currency)+'/'+esc(sub.interval):'—'}</div>
+        <div class="k">Renews</div><div class="v">${fmtDate(sub.current_period_end)}</div>
+      </div>
+      ${renderInvoicesTable(d.stripe_invoices)}
+      ${renderChargesTable(d.stripe_charges)}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Infrastructure (Hetzner)</h3>
+      <div class="kv">
+        <div class="k">Server ID</div><div class="v">${esc(t.hetzner_server_id||'—')}</div>
+        <div class="k">Type</div><div class="v">${esc(hz.server_type||'—')} · ${esc(hz.vcpus||'?')} vCPU · ${esc(hz.memory_gb||'?')} GB · ${esc(hz.disk_gb||'?')} GB</div>
+        <div class="k">Status</div><div class="v">${hz.status?badge(hz.status):'—'}</div>
+        <div class="k">IPv4</div><div class="v">${esc(hz.ipv4||t.hetzner_ip||'—')}</div>
+        <div class="k">Datacenter</div><div class="v">${esc(hz.datacenter||'—')}</div>
+        <div class="k">Snapshots</div><div class="v">${d.hetzner_snapshots.length} recent</div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>CRM profile <button class="btn btn-small" style="float:right" onclick="editCustomer('${esc(t.customer_email)}')">Edit</button></h3>
+      <div class="kv">
+        <div class="k">Company</div><div class="v">${esc(cust.company_name||'—')}</div>
+        <div class="k">Contact</div><div class="v">${esc(cust.contact_name||'—')} ${esc(cust.job_title?' · '+cust.job_title:'')}</div>
+        <div class="k">Phone</div><div class="v">${esc(cust.phone||'—')}</div>
+        <div class="k">Website</div><div class="v">${esc(cust.website||'—')}</div>
+        <div class="k">Industry</div><div class="v">${esc(cust.industry||'—')}</div>
+        <div class="k">Lifecycle</div><div class="v">${cust.lifecycle?badge(cust.lifecycle):'—'}</div>
+        <div class="k">Health score</div><div class="v">${esc(cust.health_score!=null?cust.health_score+'/100':'—')}</div>
+        <div class="k">Tags</div><div class="v">${esc(cust.tags||'—')}</div>
+        <div class="k">Owner</div><div class="v">${esc(cust.account_owner||'—')}</div>
+        <div class="k">Lead source</div><div class="v">${esc(cust.lead_source||'—')}</div>
+        <div class="k">Consent marketing</div><div class="v">${cust.consent_marketing?'yes':'no'}</div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <h3>Notes (${d.notes.length}) <button class="btn btn-small" style="float:right" onclick="addNote('${t.id}')">+ Add note</button></h3>
+      ${d.notes.map(n=>`<div class="card ${n.pinned?'pinned':''}">
+        <div class="card-meta">${esc(n.author)} · ${fmtDate(n.created_at)} ${n.pinned?'· PINNED':''}</div>
+        ${esc(n.body)}
+      </div>`).join('')||'<div class="empty">No notes yet.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Tasks (${d.tasks.length}) <button class="btn btn-small" style="float:right" onclick="addTask('${t.id}')">+ Add task</button></h3>
+      ${d.tasks.map(tk=>`<div class="card">
+        <div class="card-meta">${badge(tk.status)} · ${badge(tk.priority)} · ${esc(tk.assigned_to||'')} · ${fmtDate(tk.created_at)}</div>
+        ${esc(tk.title)}
+        ${tk.status==='open'?`<div style="margin-top:6px"><button class="btn btn-small" onclick="completeTask(${tk.id})">✓ Complete</button></div>`:''}
+      </div>`).join('')||'<div class="empty">No tasks yet.</div>'}
+    </div>
+
+    <div class="drawer-section">
+      <h3>Audit trail</h3>
+      ${d.audit.map(a=>`<div class="card">
+        <div class="card-meta">${fmtDate(a.created_at)} · ${esc(a.actor)} · ${esc(a.ip||'')}</div>
+        <strong>${esc(a.action)}</strong> ${esc(a.detail||'')}
+      </div>`).join('')||'<div class="empty">No audit events yet.</div>'}
+    </div>
+  `;
+  drawerTenantId=t.id;
+}
+let drawerTenantId=null;
+function renderInvoicesTable(arr){
+  if(!arr||!arr.length)return '<p style="color:var(--muted);font-size:12px">No invoices yet.</p>';
+  return `<h3 style="margin-top:14px;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)">Invoices</h3>
+    <table><thead><tr><th>#</th><th>Status</th><th>Due</th><th>Paid</th><th>Created</th><th></th></tr></thead><tbody>
+    ${arr.map(i=>`<tr class="non-clickable">
+      <td class="mono">${esc(i.number||i.id.slice(0,12))}</td>
+      <td>${badge(i.status)}</td>
+      <td class="mono">${money(i.amount_due,i.currency)}</td>
+      <td class="mono">${money(i.amount_paid,i.currency)}</td>
+      <td class="mono">${fmtDate(i.created_at)}</td>
+      <td>${i.hosted_invoice_url?`<a href="${esc(i.hosted_invoice_url)}" target="_blank">↗</a>`:'—'}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function renderChargesTable(arr){
+  if(!arr||!arr.length)return '';
+  return `<h3 style="margin-top:14px;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)">Charges</h3>
+    <table><thead><tr><th>ID</th><th>Status</th><th>Amount</th><th>Created</th><th>Failure</th></tr></thead><tbody>
+    ${arr.map(c=>`<tr class="non-clickable">
+      <td class="mono">${esc(c.id.slice(0,14))}</td>
+      <td>${badge(c.status)}</td>
+      <td class="mono">${money(c.amount,c.currency)}</td>
+      <td class="mono">${fmtDate(c.created_at)}</td>
+      <td style="color:var(--accent)">${esc(c.failure_message||'')}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// ── Admin actions from drawer ────────────────────────────────────
+async function impersonate(id){
+  const r=await api("/api/admin/tenants/"+id+"/impersonate",{method:"POST"});
+  if(!r.ok)return toast("Failed",true);
+  prompt("Magic-link URL (copy then paste to customer):",r.data.login_url);
+  toast("Impersonation link issued + audited");
+}
+async function mintPair(id){
+  const r=await api("/api/admin/pair/"+id,{method:"POST"});
+  if(!r.ok)return toast("Failed",true);
+  prompt("Deep-link (copy and send):",r.data.deep_link);
+}
+async function cancelSub(id){
+  if(!confirm("Cancel this subscription immediately?"))return;
+  const r=await api("/api/admin/tenants/"+id+"/cancel",{method:"POST"});
+  toast(r.ok?"Subscription cancelled":"Failed: "+(r.data.error||""),!r.ok);
+  if(r.ok)openTenant(id);
+}
+async function toggleFlag(id,flag){
+  const r=await api("/api/admin/tenants/"+id+"/flags",{method:"POST",body:JSON.stringify({flag,enabled:true})});
+  toast(r.ok?"Flag set":"Failed",!r.ok);if(r.ok)openTenant(id);
+}
+async function addNote(id){
+  const b=prompt("Note text:");if(!b)return;
+  const pinned=confirm("Pin this note to the top?");
+  const r=await api("/api/admin/notes",{method:"POST",body:JSON.stringify({tenant_id:id,body:b,pinned})});
+  toast(r.ok?"Note added":"Failed",!r.ok);if(r.ok)openTenant(id);
+}
+async function addTask(id){
+  const title=prompt("Task title:");if(!title)return;
+  const priority=prompt("Priority (low/normal/high):","normal")||"normal";
+  const r=await api("/api/admin/tasks",{method:"POST",body:JSON.stringify({tenant_id:id,title,priority})});
+  toast(r.ok?"Task created":"Failed",!r.ok);if(r.ok)openTenant(id);
+}
+async function completeTask(tid){
+  const r=await api("/api/admin/tasks/"+tid+"/complete",{method:"POST"});
+  toast(r.ok?"Completed":"Failed",!r.ok);if(r.ok&&drawerTenantId)openTenant(drawerTenantId);
+}
+async function editCustomer(email){
+  const f={};
+  f.company_name=prompt("Company name:",null)||undefined;
+  f.contact_name=prompt("Contact name:",null)||undefined;
+  f.phone=prompt("Phone:",null)||undefined;
+  f.lifecycle=prompt("Lifecycle (lead/trial/active/paused/churned):","active")||undefined;
+  f.health_score=prompt("Health score (0-100, blank to skip):",null);
+  if(f.health_score==="")delete f.health_score;else if(f.health_score!=null)f.health_score=parseInt(f.health_score);
+  const body=Object.fromEntries(Object.entries(f).filter(([k,v])=>v!==undefined));
+  body.email=email;
+  const r=await api("/api/admin/customers",{method:"POST",body:JSON.stringify(body)});
+  toast(r.ok?"Customer updated":"Failed",!r.ok);if(r.ok&&drawerTenantId)openTenant(drawerTenantId);
+}
+
+// ── Sync buttons ─────────────────────────────────────────────────
+async function syncStripe(){
+  toast("Syncing Stripe…");
+  const r=await api("/api/admin/sync/stripe",{method:"POST"});
+  toast(r.ok?"Stripe synced: "+JSON.stringify(r.data.counts):"Failed",!r.ok);
+  if(r.ok){loadDashboard();loadTenants();}
+}
+async function syncHetzner(){
+  toast("Syncing Hetzner…");
+  const r=await api("/api/admin/sync/hetzner",{method:"POST"});
+  toast(r.ok?"Hetzner synced: "+JSON.stringify(r.data.counts):"Failed",!r.ok);
+}
+
+// ── Customers / Tasks / Support / Waitlist / Audit ───────────────
+async function loadCustomers(){
+  const r=await api("/api/admin/customers");if(!r.ok)return;
+  const tb=$("#customersBody");tb.innerHTML="";
+  $("#customerCount").textContent=r.data.customers.length+" customers";
+  if(!r.data.customers.length){tb.innerHTML='<tr class="non-clickable"><td colspan="7" class="empty">No customer records yet.</td></tr>';return}
+  for(const c of r.data.customers){
+    tb.insertAdjacentHTML("beforeend",`<tr class="non-clickable">
+      <td>${esc(c.email)}</td>
+      <td>${esc(c.company_name||'—')}</td>
+      <td>${esc(c.contact_name||'—')}</td>
+      <td>${c.lifecycle?badge(c.lifecycle):'—'}</td>
+      <td class="mono">${esc(c.health_score!=null?c.health_score+'/100':'—')}</td>
+      <td class="mono">${esc(c.tenant_count)}</td>
+      <td>${esc(c.account_owner||'—')}</td>
+    </tr>`);
+  }
+}
+async function loadAllTasks(){
+  const r=await api("/api/admin/tasks");if(!r.ok)return;
+  const tb=$("#tasksBody");tb.innerHTML="";
+  $("#taskCount").textContent=r.data.tasks.length+" tasks";
+  if(!r.data.tasks.length){tb.innerHTML='<tr class="non-clickable"><td colspan="7" class="empty">No tasks yet.</td></tr>';return}
+  for(const t of r.data.tasks){
+    tb.insertAdjacentHTML("beforeend",`<tr class="non-clickable">
+      <td>${badge(t.status)}</td>
+      <td>${badge(t.priority)}</td>
+      <td>${esc(t.title)}</td>
+      <td class="mono">${esc(t.tenant_id||t.customer_email||'—')}</td>
+      <td class="mono">${esc(t.due_at||'—')}</td>
+      <td>${esc(t.assigned_to||'—')}</td>
+      <td>${t.status==='open'?`<button class="btn btn-small" onclick="completeTask(${t.id});loadAllTasks()">✓</button>`:''}</td>
+    </tr>`);
+  }
+}
+async function loadSupport(){
+  const r=await api("/api/admin/support");if(!r.ok)return;
+  const tb=$("#supportBody");tb.innerHTML="";
+  $("#supportCount").textContent=r.data.tickets.length+" tickets";
+  if(!r.data.tickets.length){tb.innerHTML='<tr class="non-clickable"><td colspan="5" class="empty">No tickets yet.</td></tr>';return}
+  for(const t of r.data.tickets){
+    tb.insertAdjacentHTML("beforeend",`<tr class="non-clickable">
+      <td>${badge(t.status)}</td><td>${badge(t.priority)}</td>
+      <td>${esc(t.subject)}</td><td class="mono">${esc(t.customer_email)}</td>
+      <td class="mono">${fmtDate(t.created_at)}</td>
+    </tr>`);
+  }
+}
 async function loadWaitlist(){
-  const r = await api('/api/admin/waitlist');
-  const tb = document.getElementById('waitlistBody');
-  tb.innerHTML = '';
-  document.getElementById('waitlistCount').textContent = (r.data.count || 0) + ' signup' + (r.data.count === 1 ? '' : 's');
-  for (const e of (r.data.entries || [])) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="mono">${e.at}</td><td>${e.email}</td><td>${e.tier || '—'}</td>`;
-    tb.appendChild(tr);
+  const r=await api("/api/admin/waitlist");
+  const tb=$("#waitlistBody");tb.innerHTML="";
+  $("#waitlistCount").textContent=(r.data.count||0)+" signups";
+  for(const e of(r.data.entries||[])){
+    tb.insertAdjacentHTML("beforeend",`<tr class="non-clickable"><td class="mono">${esc(e.at)}</td><td>${esc(e.email)}</td><td>${esc(e.tier||'—')}</td></tr>`);
+  }
+}
+async function loadAudit(){
+  const r=await api("/api/admin/audit?limit=200");
+  const tb=$("#auditBody");tb.innerHTML="";
+  $("#auditCount").textContent=(r.data.events?.length||0)+" events";
+  for(const a of(r.data.events||[])){
+    tb.insertAdjacentHTML("beforeend",`<tr class="non-clickable">
+      <td class="mono">${fmtDate(a.created_at)}</td>
+      <td>${esc(a.actor)}</td>
+      <td><strong>${esc(a.action)}</strong></td>
+      <td class="mono">${esc((a.target_type||'')+' '+(a.target_id||''))}</td>
+      <td class="mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.detail||'')}</td>
+      <td class="mono">${esc(a.ip||'')}</td>
+    </tr>`);
   }
 }
 
-// ── Sessions ────────────────────────────────────────────────────
-async function loadSessions(){
-  const r = await api('/api/admin/sessions');
-  const tb = document.getElementById('sessionsBody');
-  tb.innerHTML = '';
-  document.getElementById('sessionsCount').textContent = (r.data.count || 0) + ' active';
-  for (const s of (r.data.sessions || [])) {
-    const tr = document.createElement('tr');
-    const i = new Date(s.issued_at * 1000).toLocaleString();
-    const x = new Date(s.expires_at * 1000).toLocaleString();
-    tr.innerHTML = `<td>${s.email}</td><td class="mono">${i}</td><td class="mono">${x}</td>`;
-    tb.appendChild(tr);
-  }
-}
-
-// Initial load
+// Initial
+loadDashboard();
 loadTenants();
-loadWaitlist();
-loadSessions();
 </script>
 
 </body>

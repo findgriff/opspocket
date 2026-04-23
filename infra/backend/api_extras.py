@@ -474,6 +474,140 @@ def handle_account_logout(h: http.server.BaseHTTPRequestHandler) -> None:
     _reply(h, 200, {"ok": True}, cookie=_clear_session_cookie())
 
 
+def handle_account_profile_get(h: http.server.BaseHTTPRequestHandler) -> None:
+    sid = _read_cookie(h, SESSION_COOKIE)
+    email = session_email(sid)
+    if not email:
+        _reply(h, 401, {"error": "not signed in"})
+        return
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM customers WHERE email=?", (email,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row:
+        _reply(h, 200, dict(row))
+    else:
+        _reply(h, 200, {"email": email})
+
+
+def handle_account_profile_update(h: http.server.BaseHTTPRequestHandler) -> None:
+    sid = _read_cookie(h, SESSION_COOKIE)
+    email = session_email(sid)
+    if not email:
+        _reply(h, 401, {"error": "not signed in"})
+        return
+    body = _body_json(h)
+    allowed = {
+        "company_name", "contact_name", "job_title", "phone",
+        "website", "industry", "billing_address", "vat_number",
+        "country", "consent_marketing",
+    }
+    fields = {k: v for k, v in body.items() if k in allowed}
+    if not fields:
+        _reply(h, 400, {"error": "no valid fields"})
+        return
+    now_iso = _iso_now()
+    conn = _db()
+    try:
+        existing = conn.execute(
+            "SELECT email FROM customers WHERE email=?", (email,)
+        ).fetchone()
+        if not existing:
+            # Build an insert with defaults
+            keys = list(fields.keys())
+            placeholders = ",".join(["?"] * len(keys))
+            colnames = ",".join(keys)
+            conn.execute(
+                f"INSERT INTO customers (email, {colnames}, created_at, updated_at) "
+                f"VALUES (?, {placeholders}, ?, ?)",
+                [email] + list(fields.values()) + [now_iso, now_iso],
+            )
+        else:
+            sets = ",".join(f"{k}=?" for k in fields)
+            conn.execute(
+                f"UPDATE customers SET {sets}, updated_at=? WHERE email=?",
+                list(fields.values()) + [now_iso, email],
+            )
+        if "consent_marketing" in fields:
+            conn.execute(
+                "UPDATE customers SET consent_updated_at=? WHERE email=?",
+                (now_iso, email),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True})
+
+
+def handle_account_invoices(h: http.server.BaseHTTPRequestHandler) -> None:
+    sid = _read_cookie(h, SESSION_COOKIE)
+    email = session_email(sid)
+    if not email:
+        _reply(h, 401, {"error": "not signed in"})
+        return
+    conn = _db()
+    try:
+        # Resolve stripe_customer_id(s) via tenants
+        ids = [r["stripe_customer_id"] for r in conn.execute(
+            "SELECT DISTINCT stripe_customer_id FROM tenants "
+            "WHERE lower(customer_email)=? AND stripe_customer_id IS NOT NULL",
+            (email,),
+        ).fetchall()]
+        if not ids:
+            _reply(h, 200, {"invoices": []})
+            return
+        q = "SELECT * FROM stripe_invoices WHERE customer_id IN ({}) ORDER BY created_at DESC LIMIT 50".format(
+            ",".join("?" * len(ids))
+        )
+        rows = conn.execute(q, ids).fetchall()
+    finally:
+        conn.close()
+    out = [dict(r) for r in rows]
+    _reply(h, 200, {"invoices": out})
+
+
+def handle_account_support_create(h: http.server.BaseHTTPRequestHandler) -> None:
+    sid = _read_cookie(h, SESSION_COOKIE)
+    email = session_email(sid)
+    if not email:
+        _reply(h, 401, {"error": "not signed in"})
+        return
+    body = _body_json(h)
+    subject = (body.get("subject") or "").strip()
+    msg_body = (body.get("body") or "").strip()
+    if not subject:
+        _reply(h, 400, {"error": "subject required"})
+        return
+    now_iso = _iso_now()
+    conn = _db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO support_tickets (customer_email, subject, body, "
+            "status, priority, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (email, subject, msg_body, "open", "normal", now_iso, now_iso),
+        )
+        tid = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    # Fire off an email to ops so we know about it.
+    try:
+        from email_sender import send_email  # type: ignore
+        send_email(
+            to="hello@opspocket.com",
+            subject=f"[support] {subject} (#{tid})",
+            text=f"From: {email}\n\n{msg_body}\n\nTicket ID: {tid}",
+            html=None,
+        )
+    except Exception as e:
+        log.error("support email failed: %s", e)
+    _reply(h, 200, {"ok": True, "ticket_id": tid})
+
+
 # ── Admin endpoints (/api/admin/*) ────────────────────────────────────
 #
 # These endpoints are ONLY exposed behind Caddy basic_auth at the edge.
@@ -529,6 +663,580 @@ def handle_admin_sessions(h: http.server.BaseHTTPRequestHandler) -> None:
     })
 
 
+def _audit(conn: sqlite3.Connection, actor: str, action: str,
+           target_type: Optional[str] = None, target_id: Optional[str] = None,
+           detail: Optional[str] = None, ip: Optional[str] = None) -> None:
+    conn.execute(
+        "INSERT INTO audit_log (actor, action, target_type, target_id, "
+        "detail, ip, created_at) VALUES (?,?,?,?,?,?,?)",
+        (actor, action, target_type, target_id, detail, ip, _iso_now()),
+    )
+
+
+def _admin_actor(h: http.server.BaseHTTPRequestHandler) -> str:
+    """Caddy passes through the Authorization header; we extract the
+    basic-auth user for audit attribution. Falls back to 'admin'."""
+    auth = h.headers.get("Authorization") or ""
+    if auth.startswith("Basic "):
+        try:
+            import base64 as _b64
+            decoded = _b64.b64decode(auth[6:]).decode("utf-8")
+            user = decoded.split(":", 1)[0]
+            return user or "admin"
+        except Exception:
+            pass
+    return "admin"
+
+
+def _remote_ip(h: http.server.BaseHTTPRequestHandler) -> str:
+    # Caddy forwards the real client IP in X-Forwarded-For.
+    fwd = h.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return h.client_address[0] if h.client_address else ""
+
+
+def handle_admin_tenant_detail(h: http.server.BaseHTTPRequestHandler,
+                               tenant_id: str) -> None:
+    conn = _db()
+    try:
+        t = conn.execute(
+            "SELECT * FROM tenants WHERE id=?", (tenant_id,)
+        ).fetchone()
+        if not t:
+            _reply(h, 404, {"error": "tenant not found"})
+            return
+        tenant = dict(t)
+        # Attach Stripe data
+        sc = None
+        subs = []
+        invs = []
+        chs = []
+        if tenant.get("stripe_customer_id"):
+            cust = conn.execute(
+                "SELECT * FROM stripe_customers WHERE id=?",
+                (tenant["stripe_customer_id"],),
+            ).fetchone()
+            sc = dict(cust) if cust else None
+            subs = [dict(r) for r in conn.execute(
+                "SELECT * FROM stripe_subscriptions WHERE customer_id=?",
+                (tenant["stripe_customer_id"],),
+            ).fetchall()]
+            invs = [dict(r) for r in conn.execute(
+                "SELECT * FROM stripe_invoices WHERE customer_id=? "
+                "ORDER BY created_at DESC LIMIT 24",
+                (tenant["stripe_customer_id"],),
+            ).fetchall()]
+            chs = [dict(r) for r in conn.execute(
+                "SELECT * FROM stripe_charges WHERE customer_id=? "
+                "ORDER BY created_at DESC LIMIT 24",
+                (tenant["stripe_customer_id"],),
+            ).fetchall()]
+        # Hetzner data
+        hz = None
+        if tenant.get("hetzner_server_id"):
+            hzrow = conn.execute(
+                "SELECT * FROM hetzner_servers WHERE id=?",
+                (tenant["hetzner_server_id"],),
+            ).fetchone()
+            hz = dict(hzrow) if hzrow else None
+        snaps = [dict(r) for r in conn.execute(
+            "SELECT * FROM hetzner_snapshots WHERE server_id=? "
+            "ORDER BY created_at DESC LIMIT 14",
+            (tenant.get("hetzner_server_id"),),
+        ).fetchall()] if tenant.get("hetzner_server_id") else []
+        # Customer row + notes/tasks
+        cust_row = conn.execute(
+            "SELECT * FROM customers WHERE email=?",
+            (tenant["customer_email"].lower(),),
+        ).fetchone()
+        notes = [dict(r) for r in conn.execute(
+            "SELECT * FROM crm_notes WHERE tenant_id=? OR customer_email=? "
+            "ORDER BY pinned DESC, created_at DESC LIMIT 50",
+            (tenant_id, tenant["customer_email"].lower()),
+        ).fetchall()]
+        tasks = [dict(r) for r in conn.execute(
+            "SELECT * FROM crm_tasks WHERE tenant_id=? OR customer_email=? "
+            "ORDER BY (status='open') DESC, created_at DESC LIMIT 50",
+            (tenant_id, tenant["customer_email"].lower()),
+        ).fetchall()]
+        flags = [dict(r) for r in conn.execute(
+            "SELECT * FROM feature_flags WHERE tenant_id=?", (tenant_id,),
+        ).fetchall()]
+        audit = [dict(r) for r in conn.execute(
+            "SELECT * FROM audit_log WHERE (target_type='tenant' AND target_id=?) "
+            "OR (target_type='customer' AND target_id=?) "
+            "ORDER BY created_at DESC LIMIT 50",
+            (tenant_id, tenant["customer_email"].lower()),
+        ).fetchall()]
+    finally:
+        conn.close()
+    _reply(h, 200, {
+        "tenant": tenant,
+        "customer": dict(cust_row) if cust_row else None,
+        "stripe_customer": sc,
+        "stripe_subscriptions": subs,
+        "stripe_invoices": invs,
+        "stripe_charges": chs,
+        "hetzner_server": hz,
+        "hetzner_snapshots": snaps,
+        "notes": notes,
+        "tasks": tasks,
+        "feature_flags": flags,
+        "audit": audit,
+    })
+
+
+def handle_admin_list_notes(h, tenant_id):
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM crm_notes WHERE tenant_id=? ORDER BY pinned DESC, created_at DESC",
+            (tenant_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"notes": [dict(r) for r in rows]})
+
+
+def handle_admin_list_tasks(h, tenant_id):
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM crm_tasks WHERE tenant_id=? ORDER BY (status='open') DESC, created_at DESC",
+            (tenant_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"tasks": [dict(r) for r in rows]})
+
+
+def handle_admin_list_activity(h, tenant_id):
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM tenant_activity WHERE tenant_id=? ORDER BY ts DESC LIMIT 200",
+            (tenant_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"activity": [dict(r) for r in rows]})
+
+
+def handle_admin_customers(h):
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT c.*, "
+            "(SELECT count(*) FROM tenants t WHERE lower(t.customer_email)=c.email) AS tenant_count "
+            "FROM customers c ORDER BY c.updated_at DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"customers": [dict(r) for r in rows]})
+
+
+def handle_admin_customer_upsert(h):
+    body = _body_json(h)
+    email = (body.get("email") or "").strip().lower()
+    if not email:
+        _reply(h, 400, {"error": "email required"})
+        return
+    allowed = {
+        "company_name", "contact_name", "job_title", "phone", "website",
+        "industry", "billing_address", "vat_number", "country",
+        "lifecycle", "health_score", "tags", "account_owner",
+        "lead_source", "notes",
+    }
+    fields = {k: v for k, v in body.items() if k in allowed}
+    now_iso = _iso_now()
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT email FROM customers WHERE email=?", (email,)
+        ).fetchone()
+        if not row:
+            cols = ",".join(["email"] + list(fields.keys()) + ["created_at", "updated_at"])
+            placeholders = ",".join(["?"] * (len(fields) + 3))
+            conn.execute(
+                f"INSERT INTO customers ({cols}) VALUES ({placeholders})",
+                [email] + list(fields.values()) + [now_iso, now_iso],
+            )
+        else:
+            if fields:
+                sets = ",".join(f"{k}=?" for k in fields)
+                conn.execute(
+                    f"UPDATE customers SET {sets}, updated_at=? WHERE email=?",
+                    list(fields.values()) + [now_iso, email],
+                )
+        _audit(conn, _admin_actor(h), "customer.upsert",
+               target_type="customer", target_id=email,
+               detail=json.dumps(fields), ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True})
+
+
+def handle_admin_note_create(h):
+    body = _body_json(h)
+    tenant_id = body.get("tenant_id")
+    email = (body.get("customer_email") or "").lower() or None
+    bodytxt = (body.get("body") or "").strip()
+    if not bodytxt:
+        _reply(h, 400, {"error": "body required"})
+        return
+    if not tenant_id and not email:
+        _reply(h, 400, {"error": "tenant_id or customer_email required"})
+        return
+    conn = _db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO crm_notes (tenant_id, customer_email, author, body, "
+            "pinned, created_at) VALUES (?,?,?,?,?,?)",
+            (tenant_id, email, _admin_actor(h), bodytxt,
+             1 if body.get("pinned") else 0, _iso_now()),
+        )
+        nid = cur.lastrowid
+        _audit(conn, _admin_actor(h), "note.create",
+               target_type="tenant" if tenant_id else "customer",
+               target_id=tenant_id or email, detail=str(nid),
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True, "id": nid})
+
+
+def handle_admin_task_create(h):
+    body = _body_json(h)
+    title = (body.get("title") or "").strip()
+    if not title:
+        _reply(h, 400, {"error": "title required"})
+        return
+    tenant_id = body.get("tenant_id")
+    email = (body.get("customer_email") or "").lower() or None
+    conn = _db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO crm_tasks (tenant_id, customer_email, title, due_at, "
+            "status, priority, assigned_to, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (tenant_id, email, title, body.get("due_at"),
+             "open", body.get("priority") or "normal",
+             body.get("assigned_to") or _admin_actor(h), _iso_now()),
+        )
+        tid = cur.lastrowid
+        _audit(conn, _admin_actor(h), "task.create",
+               target_type="tenant" if tenant_id else "customer",
+               target_id=tenant_id or email, detail=str(tid),
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True, "id": tid})
+
+
+def handle_admin_task_complete(h, task_id):
+    conn = _db()
+    try:
+        conn.execute(
+            "UPDATE crm_tasks SET status='done', completed_at=? WHERE id=?",
+            (_iso_now(), task_id),
+        )
+        _audit(conn, _admin_actor(h), "task.complete",
+               target_type="task", target_id=str(task_id),
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True})
+
+
+def handle_admin_all_tasks(h):
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM crm_tasks ORDER BY (status='open') DESC, "
+            "CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, "
+            "created_at DESC LIMIT 200"
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"tasks": [dict(r) for r in rows]})
+
+
+def handle_admin_support_list(h):
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM support_tickets ORDER BY "
+            "CASE status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END, "
+            "created_at DESC LIMIT 100"
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"tickets": [dict(r) for r in rows]})
+
+
+def handle_admin_audit(h, query):
+    limit = int((query.get("limit", ["200"])[0])) if query else 200
+    limit = min(limit, 1000)
+    conn = _db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
+    _reply(h, 200, {"events": [dict(r) for r in rows]})
+
+
+def handle_admin_sync_stripe(h):
+    try:
+        import sync_stripe  # type: ignore
+        counts = sync_stripe.sync_all()
+        sync_stripe.sync_subscriptions_all_statuses()
+        conn = _db()
+        try:
+            _audit(conn, _admin_actor(h), "sync.stripe",
+                   detail=json.dumps(counts), ip=_remote_ip(h))
+            conn.commit()
+        finally:
+            conn.close()
+        _reply(h, 200, {"ok": True, "counts": counts})
+    except Exception as e:
+        log.exception("stripe sync failed: %s", e)
+        _reply(h, 500, {"error": str(e)})
+
+
+def handle_admin_sync_hetzner(h):
+    try:
+        import sync_hetzner  # type: ignore
+        counts = sync_hetzner.sync_all()
+        conn = _db()
+        try:
+            _audit(conn, _admin_actor(h), "sync.hetzner",
+                   detail=json.dumps(counts), ip=_remote_ip(h))
+            conn.commit()
+        finally:
+            conn.close()
+        _reply(h, 200, {"ok": True, "counts": counts})
+    except Exception as e:
+        log.exception("hetzner sync failed: %s", e)
+        _reply(h, 500, {"error": str(e)})
+
+
+def handle_admin_impersonate(h, tenant_id):
+    """Generate a magic-link the admin can paste to support a customer
+    without knowing their password. Logged + time-limited."""
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT customer_email FROM tenants WHERE id=?", (tenant_id,),
+        ).fetchone()
+        if not row:
+            _reply(h, 404, {"error": "tenant not found"})
+            return
+        email = row["customer_email"].lower()
+    finally:
+        conn.close()
+    token = issue_magic_token(email)
+    conn = _db()
+    try:
+        _audit(conn, _admin_actor(h), "impersonate",
+               target_type="customer", target_id=email,
+               detail=f"token issued for tenant {tenant_id}",
+               ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {
+        "login_url": f"https://{DOMAIN_ROOT}/account?token={urllib.parse.quote(token)}",
+        "email": email,
+        "ttl_minutes": MAGIC_TTL_MINUTES,
+    })
+
+
+def handle_admin_cancel_subscription(h, tenant_id):
+    """Cancel a customer's Stripe subscription immediately."""
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT stripe_subscription_id, customer_email FROM tenants WHERE id=?",
+            (tenant_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row["stripe_subscription_id"]:
+        _reply(h, 404, {"error": "no subscription"})
+        return
+    try:
+        key = STRIPE_API_KEY_FILE.read_text().strip()
+    except Exception:
+        _reply(h, 500, {"error": "stripe key unreadable"})
+        return
+    req = urllib.request.Request(
+        f"https://api.stripe.com/v1/subscriptions/{row['stripe_subscription_id']}",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            result = json.loads(r.read())
+    except Exception as e:
+        _reply(h, 502, {"error": str(e)})
+        return
+    conn = _db()
+    try:
+        _audit(conn, _admin_actor(h), "subscription.cancel",
+               target_type="tenant", target_id=tenant_id,
+               detail=row["stripe_subscription_id"], ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True, "status": result.get("status")})
+
+
+def handle_admin_flag_set(h, tenant_id):
+    body = _body_json(h)
+    flag = body.get("flag")
+    enabled = 1 if body.get("enabled") else 0
+    if not flag:
+        _reply(h, 400, {"error": "flag required"})
+        return
+    conn = _db()
+    try:
+        conn.execute(
+            "INSERT INTO feature_flags (tenant_id, flag, enabled, updated_at) "
+            "VALUES (?,?,?,?) "
+            "ON CONFLICT(tenant_id, flag) DO UPDATE SET "
+            "enabled=excluded.enabled, updated_at=excluded.updated_at",
+            (tenant_id, flag, enabled, _iso_now()),
+        )
+        _audit(conn, _admin_actor(h), "flag.set",
+               target_type="tenant", target_id=tenant_id,
+               detail=f"{flag}={enabled}", ip=_remote_ip(h))
+        conn.commit()
+    finally:
+        conn.close()
+    _reply(h, 200, {"ok": True})
+
+
+def handle_admin_analytics(h):
+    """Compute MRR / ARR / churn / trial / failed payments / etc.
+    Uses the local Stripe cache — call /api/admin/sync/stripe first
+    for fresh numbers."""
+    conn = _db()
+    try:
+        # MRR — sum of active subscription amounts normalised to monthly
+        rows = conn.execute(
+            "SELECT status, interval, amount, currency FROM stripe_subscriptions"
+        ).fetchall()
+        mrr_minor = 0  # in minor units (pence)
+        active = 0
+        trialing = 0
+        past_due = 0
+        cancelled = 0
+        currency_seen = "gbp"
+        for r in rows:
+            if r["status"] == "active":
+                active += 1
+                if r["interval"] == "year":
+                    mrr_minor += (r["amount"] or 0) // 12
+                else:
+                    mrr_minor += (r["amount"] or 0)
+                if r["currency"]:
+                    currency_seen = r["currency"]
+            elif r["status"] == "trialing":
+                trialing += 1
+            elif r["status"] == "past_due":
+                past_due += 1
+            elif r["status"] == "canceled":
+                cancelled += 1
+
+        failed_payments = conn.execute(
+            "SELECT count(*) AS n FROM stripe_charges WHERE status='failed'"
+        ).fetchone()["n"]
+
+        # Tenant status distribution
+        tenant_status = dict(conn.execute(
+            "SELECT status, count(*) AS n FROM tenants GROUP BY status"
+        ).fetchall() and {
+            r["status"]: r["n"] for r in conn.execute(
+                "SELECT status, count(*) AS n FROM tenants GROUP BY status"
+            ).fetchall()
+        } or {})
+
+        # Recent invoices + last paid
+        last_paid = conn.execute(
+            "SELECT amount_paid, currency, paid_at FROM stripe_invoices "
+            "WHERE status='paid' AND paid_at IS NOT NULL "
+            "ORDER BY paid_at DESC LIMIT 1"
+        ).fetchone()
+
+        # Total paid ever
+        total_paid_minor = conn.execute(
+            "SELECT COALESCE(SUM(amount_paid), 0) AS s FROM stripe_invoices "
+            "WHERE status='paid'"
+        ).fetchone()["s"]
+
+        # Recent failed invoices
+        failed_invoices = conn.execute(
+            "SELECT count(*) AS n FROM stripe_invoices WHERE status='uncollectible'"
+        ).fetchone()["n"]
+
+        # Trial converting / churn counts in last 30 days
+        import time as _time
+        thirty = _time.time() - 30 * 86400
+        new_trials = conn.execute(
+            "SELECT count(*) AS n FROM stripe_subscriptions "
+            "WHERE trial_end > ? AND status='trialing'",
+            (thirty,),
+        ).fetchone()["n"]
+        recent_churn = conn.execute(
+            "SELECT count(*) AS n FROM stripe_subscriptions "
+            "WHERE status='canceled' AND canceled_at > ?",
+            (thirty,),
+        ).fetchone()["n"]
+
+        waitlist_count = 0
+        waitlist_path = pathlib.Path("/var/lib/opspocket/waitlist.txt")
+        if waitlist_path.exists():
+            waitlist_count = len([
+                l for l in waitlist_path.read_text().splitlines() if l.strip()
+            ])
+    finally:
+        conn.close()
+
+    _reply(h, 200, {
+        "currency": currency_seen,
+        "mrr_minor": mrr_minor,
+        "mrr_pounds": mrr_minor / 100,
+        "arr_minor": mrr_minor * 12,
+        "arr_pounds": mrr_minor * 12 / 100,
+        "subscriptions": {
+            "active": active,
+            "trialing": trialing,
+            "past_due": past_due,
+            "cancelled": cancelled,
+        },
+        "tenant_status": tenant_status,
+        "failed_payments_total": failed_payments,
+        "failed_invoices_total": failed_invoices,
+        "total_paid_minor": total_paid_minor,
+        "total_paid_pounds": total_paid_minor / 100,
+        "last_paid_invoice": dict(last_paid) if last_paid else None,
+        "new_trials_30d": new_trials,
+        "recent_churn_30d": recent_churn,
+        "waitlist_count": waitlist_count,
+    })
+
+
 def handle_admin_issue_pair(h: http.server.BaseHTTPRequestHandler,
                             tenant_id: str) -> None:
     """Staff-generate a fresh pair code — for support cases where the
@@ -575,14 +1283,54 @@ def handle_get(h: http.server.BaseHTTPRequestHandler) -> bool:
     if path == "/api/account/me":
         handle_account_me(h)
         return True
+    if path == "/api/account/invoices":
+        handle_account_invoices(h)
+        return True
+    if path == "/api/account/profile":
+        handle_account_profile_get(h)
+        return True
+    # Admin — reading
     if path == "/api/admin/tenants":
         handle_admin_tenants(h)
         return True
+    if path.startswith("/api/admin/tenants/"):
+        # /api/admin/tenants/<id>[/subpath]
+        rest = path[len("/api/admin/tenants/"):]
+        parts = rest.split("/", 1)
+        tenant_id = parts[0]
+        sub = parts[1] if len(parts) > 1 else ""
+        if sub == "":
+            handle_admin_tenant_detail(h, tenant_id)
+            return True
+        if sub == "notes":
+            handle_admin_list_notes(h, tenant_id)
+            return True
+        if sub == "tasks":
+            handle_admin_list_tasks(h, tenant_id)
+            return True
+        if sub == "activity":
+            handle_admin_list_activity(h, tenant_id)
+            return True
     if path == "/api/admin/waitlist":
         handle_admin_waitlist(h)
         return True
     if path == "/api/admin/sessions":
         handle_admin_sessions(h)
+        return True
+    if path == "/api/admin/customers":
+        handle_admin_customers(h)
+        return True
+    if path == "/api/admin/audit":
+        handle_admin_audit(h, query)
+        return True
+    if path == "/api/admin/analytics":
+        handle_admin_analytics(h)
+        return True
+    if path == "/api/admin/support":
+        handle_admin_support_list(h)
+        return True
+    if path == "/api/admin/tasks":
+        handle_admin_all_tasks(h)
         return True
     if path.startswith("/api/pair/"):
         code = path[len("/api/pair/"):]
@@ -602,12 +1350,50 @@ def handle_post(h: http.server.BaseHTTPRequestHandler) -> bool:
     if path == "/api/account/portal":
         handle_account_portal(h)
         return True
+    if path == "/api/account/profile":
+        handle_account_profile_update(h)
+        return True
+    if path == "/api/account/support":
+        handle_account_support_create(h)
+        return True
     if path.startswith("/api/account/pair/"):
         tenant_id = path[len("/api/account/pair/"):]
         handle_account_pair(h, tenant_id)
         return True
+    # ── Admin ─────────────────────────────────────────────────────
     if path.startswith("/api/admin/pair/"):
         tenant_id = path[len("/api/admin/pair/"):]
         handle_admin_issue_pair(h, tenant_id)
+        return True
+    if path == "/api/admin/sync/stripe":
+        handle_admin_sync_stripe(h)
+        return True
+    if path == "/api/admin/sync/hetzner":
+        handle_admin_sync_hetzner(h)
+        return True
+    if path == "/api/admin/notes":
+        handle_admin_note_create(h)
+        return True
+    if path == "/api/admin/tasks":
+        handle_admin_task_create(h)
+        return True
+    if path.startswith("/api/admin/tasks/") and path.endswith("/complete"):
+        tid = path[len("/api/admin/tasks/"):-len("/complete")]
+        handle_admin_task_complete(h, tid)
+        return True
+    if path == "/api/admin/customers":
+        handle_admin_customer_upsert(h)
+        return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/impersonate"):
+        tid = path[len("/api/admin/tenants/"):-len("/impersonate")]
+        handle_admin_impersonate(h, tid)
+        return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/cancel"):
+        tid = path[len("/api/admin/tenants/"):-len("/cancel")]
+        handle_admin_cancel_subscription(h, tid)
+        return True
+    if path.startswith("/api/admin/tenants/") and path.endswith("/flags"):
+        tid = path[len("/api/admin/tenants/"):-len("/flags")]
+        handle_admin_flag_set(h, tid)
         return True
     return False
