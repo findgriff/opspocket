@@ -19,8 +19,15 @@
           <p style="margin:0 0 16px;">Hi <strong>{{customer_email}}</strong>,</p>
           <p style="margin:0 0 16px;">Your <strong style="color:#22d3ee;">{{tier}}</strong> OpsPocket Cloud tenant is provisioned and ready. Everything below is yours — bookmark this email, or save the credentials in your password manager.</p>
 
+          <!-- ── One-tap iPhone setup ─────────────────────────────── -->
+          <div style="background:#1a0f1f;border:1px solid #b57bff;border-radius:10px;padding:20px;margin:24px 0;text-align:center;">
+            <div style="font-family:'JetBrains Mono',Consolas,Menlo,monospace;font-size:11px;color:#b57bff;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">iPhone one-tap setup</div>
+            <a href="{{pair_web_url}}" style="display:inline-block;background:#b57bff;color:#0a0a0a;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">Connect to my server →</a>
+            <p style="margin:12px 0 0;color:#999;font-size:12px;">Tap on your iPhone. Configures the OpsPocket app automatically. Link expires in 7 days — single use.</p>
+          </div>
+
           <div style="background:#0a0a0a;border:1px solid #2a2a2a;border-radius:8px;padding:20px;margin:24px 0;">
-            <div style="font-family:'JetBrains Mono',Consolas,Menlo,monospace;font-size:11px;color:#22d3ee;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">Control UI</div>
+            <div style="font-family:'JetBrains Mono',Consolas,Menlo,monospace;font-size:11px;color:#22d3ee;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">Control UI (browser)</div>
             <a href="{{control_ui_url}}" style="color:#22d3ee;text-decoration:none;font-family:'JetBrains Mono',Consolas,Menlo,monospace;font-size:16px;word-break:break-all;">{{control_ui_url}}</a>
             <div style="height:16px;"></div>
             <div style="font-family:'JetBrains Mono',Consolas,Menlo,monospace;font-size:13px;color:#aaa;">
@@ -37,15 +44,8 @@
             </div>
           </div>
 
-          <p style="margin:24px 0 8px;"><strong style="color:#fff;">Next steps</strong></p>
-          <ol style="margin:0 0 16px;padding-left:20px;color:#d0d0d0;">
-            <li>Sign in to your Control UI with the credentials above.</li>
-            <li>Download the iOS app: <a href="https://opspocket.com/app" style="color:#22d3ee;">opspocket.com/app</a>.</li>
-            <li>Paste your MCP endpoint and token into the app to pair instantly.</li>
-          </ol>
-
-          <p style="margin:24px 0 8px;"><strong style="color:#fff;">Billing</strong></p>
-          <p style="margin:0 0 16px;color:#d0d0d0;">Manage your subscription, update your card, or cancel any time in the <a href="{{portal_url}}" style="color:#22d3ee;">Stripe customer portal</a>.</p>
+          <p style="margin:24px 0 8px;"><strong style="color:#fff;">Your account</strong></p>
+          <p style="margin:0 0 16px;color:#d0d0d0;">Manage your subscription, update your card, download invoices, or generate a fresh pair code at <a href="{{account_url}}" style="color:#22d3ee;">{{account_url}}</a>. Sign in with this email — no password needed, we'll email you a one-tap link.</p>
 
           <p style="margin:24px 0 8px;"><strong style="color:#fff;">Need help?</strong></p>
           <p style="margin:0;color:#d0d0d0;">Reply to this email or write to <a href="mailto:{{support_email}}" style="color:#22d3ee;">{{support_email}}</a>. We read every message.</p>

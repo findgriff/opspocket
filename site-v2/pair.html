@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pair device — OpsPocket</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0A0B;--panel:#141416;--panel-2:#1C1C1F;--border:#25252A;
+  --fg:#F5F5F7;--muted:#9AA0A6;--accent:#FF3B1F;--cyan:#00E6FF;--green:#4CAF50;
+}
+html,body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh;line-height:1.5}
+.mono,code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px}
+a{color:var(--cyan);text-decoration:none} a:hover{text-decoration:underline}
+.wrap{max-width:640px;margin:0 auto;padding:64px 24px 96px}
+.brand{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:17px;margin-bottom:40px;color:var(--fg)}
+.brand-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 12px var(--accent)}
+h1{font-size:34px;font-weight:800;letter-spacing:-0.02em;margin-bottom:10px}
+.sub{color:var(--muted);font-size:16px;margin-bottom:32px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.card h2{font-size:17px;font-weight:700;margin-bottom:14px}
+.card p{color:var(--muted);font-size:14px;margin-bottom:14px}
+.btn{display:inline-block;background:var(--accent);color:#fff;padding:12px 24px;border:0;border-radius:8px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;transition:transform .08s}
+.btn:hover{transform:translateY(-1px);text-decoration:none}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--fg)}
+.cred{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px}
+.cred-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+.cred-value{word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--fg)}
+.copy{float:right;background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:5px;font:inherit;font-size:11px;cursor:pointer}
+.copy:hover{color:var(--cyan);border-color:var(--cyan)}
+.error{background:rgba(255,59,31,.12);color:#ff8b78;padding:16px;border:1px solid rgba(255,59,31,.3);border-radius:10px}
+.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="brand" href="/"><span class="brand-dot"></span>OpsPocket</a>
+
+  <div id="loading"><div class="spinner"></div><p style="text-align:center;color:var(--muted)">Fetching pair payload…</p></div>
+
+  <div id="success" class="hidden">
+    <h1>You're connected.</h1>
+    <p class="sub">Your server credentials are below. If you're on your iPhone with the OpsPocket app installed, this page redirected into the app automatically.</p>
+
+    <div class="card">
+      <h2>Open in OpsPocket app</h2>
+      <p>Tap this to open the app (if installed) and auto-configure the profile:</p>
+      <a id="appLink" class="btn">Open in OpsPocket →</a>
+      <p style="margin:16px 0 0;font-size:12px">Don't have the app? It's coming soon to the App Store. Your credentials below work on any SSH/web client in the meantime.</p>
+    </div>
+
+    <div class="card">
+      <h2>Or use these credentials directly</h2>
+
+      <div class="cred">
+        <button class="copy" data-copy="url">copy</button>
+        <div class="cred-label">OpenClaw Control UI</div>
+        <div class="cred-value" id="url"></div>
+      </div>
+      <div class="cred">
+        <button class="copy" data-copy="user">copy</button>
+        <div class="cred-label">Username</div>
+        <div class="cred-value" id="user"></div>
+      </div>
+      <div class="cred">
+        <button class="copy" data-copy="pass">copy</button>
+        <div class="cred-label">Password</div>
+        <div class="cred-value" id="pass"></div>
+      </div>
+      <div class="cred">
+        <button class="copy" data-copy="mcp">copy</button>
+        <div class="cred-label">MCP endpoint</div>
+        <div class="cred-value" id="mcp"></div>
+      </div>
+      <div class="cred">
+        <button class="copy" data-copy="token">copy</button>
+        <div class="cred-label">Gateway token</div>
+        <div class="cred-value" id="token"></div>
+      </div>
+    </div>
+
+    <p style="margin-top:24px;color:var(--muted);font-size:13px">
+      ⚠️ This page can only be viewed <strong>once</strong>. Save these credentials now.
+      If you lose them, sign in at <a href="/account">/account</a> to generate a new pair code.
+    </p>
+  </div>
+
+  <div id="error" class="hidden">
+    <div class="error">
+      <strong id="errTitle">Couldn't pair this device</strong>
+      <p id="errMsg" style="margin-top:8px;font-size:14px"></p>
+    </div>
+    <div style="margin-top:16px">
+      <a href="/account" class="btn btn-ghost">Sign in to generate a new code</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const code = params.get('code');
+
+(async function(){
+  if (!code) {
+    return showError('No pair code', 'This URL is missing ?code=… — it may have been truncated.');
+  }
+
+  // Try to open the app immediately via the custom scheme. If the app isn't
+  // installed, the user stays on this page and sees the credentials.
+  // We do this BEFORE fetching so iOS handles the hand-off cleanly.
+  const ua = navigator.userAgent;
+  const isIos = /iPad|iPhone|iPod/.test(ua);
+  if (isIos) {
+    // Attempt silent deep-link. If it doesn't fire, the user still sees
+    // this page.
+    window.location.href = 'opspocket://pair?code=' + encodeURIComponent(code);
+  }
+
+  // Fetch the payload (single-use). If the app intercepted first, this
+  // may 404 — that's fine, the app already has it.
+  try {
+    const res = await fetch('/api/pair/' + encodeURIComponent(code), {
+      headers: { 'Accept': 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return showError(
+        res.status === 404 ? 'Code already used or expired' : 'Error',
+        data.error || 'Please request a new pair code from your account.'
+      );
+    }
+    render(data);
+  } catch (e) {
+    showError('Network error', 'Could not fetch pair data. Check your connection and try again.');
+  }
+})();
+
+function render(p){
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('success').classList.remove('hidden');
+  document.getElementById('url').textContent = p.control_ui_url;
+  document.getElementById('user').textContent = p.username;
+  document.getElementById('pass').textContent = p.password;
+  document.getElementById('mcp').textContent = p.mcp_endpoint;
+  document.getElementById('token').textContent = p.gateway_token;
+  document.getElementById('appLink').href = 'opspocket://pair?code=' + encodeURIComponent(code);
+}
+
+function showError(title, msg){
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('error').classList.remove('hidden');
+  document.getElementById('errTitle').textContent = title;
+  document.getElementById('errMsg').textContent = msg;
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  const id = b.dataset.copy;
+  const txt = document.getElementById(id)?.textContent || '';
+  navigator.clipboard?.writeText(txt);
+  const orig = b.textContent;
+  b.textContent = 'copied';
+  setTimeout(() => b.textContent = orig, 1200);
+});
+</script>
+</body>
+</html>

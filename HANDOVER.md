@@ -129,6 +129,111 @@ Chronological, newest last:
 
 ---
 
+## SaaS CRM — shipped 2026-04-23 ✅
+
+**The three biggest unblocked items from the blocked-saas-ui spec are now live.** Every Cloud customer now has a working self-service account; every founder-side operation is now visible in the admin panel; every welcome email now carries a one-tap iPhone deep-link that auto-configures the OpsPocket app.
+
+### What shipped
+
+| Piece | Location | Auth | Status |
+|---|---|---|---|
+| **Customer dashboard** | `https://opspocket.com/account` | Magic-link (email) → 30-day session cookie | ✅ live |
+| **Admin panel** | `https://opspocket.com/admin` | Caddy `basic_auth` at the edge | ✅ live |
+| **Pair landing page** | `https://opspocket.com/pair?code=<code>` | Single-use pair code (7-day TTL) | ✅ live |
+| **Backend — account API** | `/api/account/{login, verify, me, portal, logout, pair/<id>}` | Magic-link issuance + session cookie | ✅ live |
+| **Backend — admin API** | `/api/admin/{tenants, waitlist, sessions, pair/<id>}` | Caddy `basic_auth` → trusted at backend | ✅ live |
+| **Backend — pair API** | `/api/pair/<code>` | Single-use code | ✅ live |
+
+### How it fits together
+
+- Auth model is **three-layer, minimal, no JWT, no OAuth**:
+  - **Customer** logs in with email only — backend mints a 30-min one-time token, emails it via Resend, customer clicks link, backend exchanges for a 30-day session cookie. Stored in sqlite (`magic_tokens`, `sessions`).
+  - **Admin** is Caddy `basic_auth` at the edge. Backend trusts forwarded requests and has no password check of its own. Single source of truth = the hash in `/etc/caddy/Caddyfile.d/opspocket.caddy`. Credentials saved in `/etc/opspocket/admin-creds.txt` (mode 0600).
+  - **App pairing** is a 12-char URL-safe code with a 7-day TTL, single-use. Auto-generated on every `active` transition; exposed via `opspocket://pair?code=…` deep-link in the welcome email. Customer can mint fresh codes from `/account`, and staff can mint codes from `/admin`.
+
+- Session state lives in **sqlite** (new tables: `magic_tokens`, `sessions`, `pair_codes`) — service can restart without logging anyone out, no in-process state.
+
+- Backend is the **same stdlib Python HTTP server** as before (`opspocket-backend.service` on `127.0.0.1:8092`). New endpoints added via a dispatch call into `api_extras.py`. Zero new pip dependencies.
+
+- Caddy routes:
+  - `/api/admin/*` → basic-auth'd reverse-proxy
+  - `/admin` + `/admin.html` → basic-auth'd static file
+  - `/api/account/*`, `/api/pair/*`, `/api/stripe-webhook` → unauth'd reverse-proxy (backend handles auth where needed)
+  - `/account`, `/pair`, everything else → static site
+
+### Customer journey — end to end
+
+1. Customer buys Starter on `https://opspocket.com/cloud`
+2. Stripe webhook fires → tenant row created with `status=pending`
+3. Orchestrator provisions Hetzner VPS + OpenClaw install (10 min)
+4. Tenant hits `active` → **pair code auto-generated**
+5. Welcome email sent via Resend, includes:
+   - `opspocket://pair?code=…` iPhone deep-link button (purple CTA)
+   - `{{account_url}}` = `https://opspocket.com/account` for magic-link login
+   - Credentials as a fallback
+6. Customer taps the pair button on iPhone → app opens → fetches `/api/pair/<code>` → writes server profile to Keychain → done
+7. Customer can later sign in at `/account` to generate new pair codes, open Stripe billing portal, or view tenant status
+
+### Admin journey — end to end
+
+1. Open `https://opspocket.com/admin` → Caddy prompts for basic-auth
+2. Admin panel shows 5 stats cards (Total / Active / Provisioning / Failed / Cancelled) + 3 tabs (Tenants / Waitlist / Active sessions)
+3. Each tenant row: one-click "Open UI" (new tab) + "Pair code" (generates fresh single-use code for support cases)
+4. Waitlist tab shows signups from `/var/lib/opspocket/waitlist.txt`
+5. Sessions tab shows active customer logins (useful for support: "is this customer signed in right now?")
+
+### Files added / modified
+
+**New on dev box:**
+- `/opt/opspocket/backend/api_extras.py` — 400 lines, all new API logic
+- `/var/www/opspocket.com/{account,admin,pair}.html` — three new pages
+- `/etc/opspocket/admin-creds.txt` — admin basic-auth password (mode 0600)
+- `/var/lib/opspocket/tenants.db` — three new tables: `magic_tokens`, `sessions`, `pair_codes`
+
+**Modified on dev box:**
+- `/etc/caddy/Caddyfile.d/opspocket.caddy` — basic_auth for `/admin` + `/api/admin/*`, expanded `/api/*` routing
+- `/opt/opspocket/backend/app.py` — dispatches new API paths + generates pair code at `active`
+- `/opt/opspocket/backend/schema.sql` — table defs for the new auth/pair surfaces
+- `/opt/opspocket/backend/email-template.{html,txt}` — pair deep-link button + `/account` CTA
+
+**Repo side (all committed):**
+- `infra/backend/api_extras.py`
+- `infra/backend/app.py`
+- `infra/backend/schema.sql`
+- `infra/backend/email-template.{html,txt}`
+- `infra/caddy-sites/opspocket.caddy`
+- `site-v2/{account,admin,pair}.html`
+
+### What was NOT built and why
+
+- **Shared-host Docker pivot** — deliberately deferred per the 2026-04-23 conversation. Per-VPS-per-customer model is the current, validated, shipping architecture. Shared-host is a margin optimisation to revisit once we have ≥ 5 paying customers. No code changes to `install-openclaw.sh` or `provision-tenant.sh` in this pass.
+
+### Validated end-to-end on 2026-04-23
+
+```
+✅ POST /api/account/login  → email sent
+✅ magic token row created in magic_tokens table
+✅ GET  /api/account/verify?token=X → Set-Cookie sent, session row created
+✅ GET  /api/account/me (cookie) → returns real tenants
+✅ GET  /admin → 401 without auth, 200 with 'craig' creds
+✅ GET  /api/admin/tenants → returns full tenant registry
+✅ POST /api/admin/pair/<id> → fresh pair code minted
+✅ GET  /api/pair/<code> → returns full credential payload
+✅ GET  /api/pair/<code> second time → 404 (single-use confirmed)
+✅ GET  https://opspocket.com/account → 200 (loads dashboard)
+✅ GET  https://opspocket.com/pair → 200 (loads landing)
+```
+
+### Admin panel access — credentials
+
+- URL: `https://opspocket.com/admin`
+- User: `craig`
+- Password: `OMfZQSbUT89Nz5k4xv` (also saved at `/etc/opspocket/admin-creds.txt` on dev box)
+
+To rotate: `ssh dev 'caddy hash-password --plaintext "NEW-PASSWORD"'` → replace the hash in `infra/caddy-sites/opspocket.caddy` → `scp` + `systemctl reload caddy`.
+
+---
+
 ## Audit pass — 2026-04-22
 
 Full health audit of everything built this session. Results:
@@ -194,6 +299,7 @@ Full health audit of everything built this session. Results:
 ### Cloud — deferred until above lands
 
 - **Customer account dashboard (`/account`)** and **SaaS admin panel** — both blocked on Stripe being live + a tenants query API. Design captured in `docs/superpowers/specs/2026-04-22-blocked-saas-ui.md`. ~1 week of work once unblocked.
+  - **UPDATE 2026-04-23**: BOTH SHIPPED. See the new section "SaaS CRM — shipped 2026-04-23" below.
 
 ### App
 

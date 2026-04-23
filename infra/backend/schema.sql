@@ -30,3 +30,42 @@ CREATE TABLE IF NOT EXISTS stripe_events (
   received_at TEXT NOT NULL,
   payload TEXT NOT NULL
 );
+
+-- ── Customer self-service (magic-link login) ─────────────────────────
+--
+-- Customers log in by email → we email a one-time token → they click
+-- the link → we set a session cookie. No passwords. 30-minute token
+-- TTL, 30-day session TTL.
+
+CREATE TABLE IF NOT EXISTS magic_tokens (
+  token TEXT PRIMARY KEY,          -- URL-safe random 32 bytes
+  email TEXT NOT NULL,
+  issued_at INTEGER NOT NULL,      -- unix seconds
+  used_at INTEGER                  -- null until consumed
+);
+CREATE INDEX IF NOT EXISTS idx_magic_tokens_email ON magic_tokens(email);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  sid TEXT PRIMARY KEY,            -- URL-safe random 32 bytes
+  email TEXT NOT NULL,
+  issued_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL      -- unix seconds
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+-- ── App pairing (deep-link onboarding) ───────────────────────────────
+--
+-- Generated when a tenant hits 'active'. The welcome email embeds
+-- opspocket://pair?code=<code>. The iOS app fetches /api/pair/<code>
+-- exactly once and writes the creds straight into Keychain. 7-day TTL.
+
+CREATE TABLE IF NOT EXISTS pair_codes (
+  code TEXT PRIMARY KEY,           -- URL-safe random 12 chars
+  tenant_id TEXT NOT NULL,
+  issued_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER,                 -- null until fetched
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);
+CREATE INDEX IF NOT EXISTS idx_pair_codes_tenant ON pair_codes(tenant_id);

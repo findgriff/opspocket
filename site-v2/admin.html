@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpsPocket · Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0A0B;--panel:#141416;--panel-2:#1C1C1F;--border:#25252A;
+  --fg:#F5F5F7;--muted:#9AA0A6;--accent:#FF3B1F;--cyan:#00E6FF;
+  --green:#4CAF50;--amber:#FFB800;--purple:#B57BFF;
+}
+html,body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh}
+.mono,code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+.nav{position:sticky;top:0;background:rgba(10,10,11,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:10}
+.nav-inner{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.brand{font-weight:800;display:flex;align-items:center;gap:8px;color:var(--fg)}
+.brand-dot{width:8px;height:8px;background:var(--purple);border-radius:50%;box-shadow:0 0 12px var(--purple)}
+.brand-admin{font-size:11px;color:var(--purple);background:rgba(181,123,255,.12);padding:3px 8px;border-radius:999px;margin-left:8px;font-weight:700;letter-spacing:0.06em}
+.wrap{max-width:1200px;margin:0 auto;padding:32px 24px 96px}
+h1{font-size:30px;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px}
+.sub{color:var(--muted);margin-bottom:32px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.tab{padding:12px 20px;background:none;border:0;color:var(--muted);font:inherit;font-weight:600;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:var(--fg);border-bottom-color:var(--purple)}
+.tab:hover:not(.active){color:var(--fg)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:28px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-value.green{color:var(--green)} .stat-value.amber{color:var(--amber)} .stat-value.red{color:var(--accent)}
+table{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:10px;border-collapse:collapse;overflow:hidden}
+th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+th{background:var(--panel-2);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;font-size:11px}
+td.mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+tr:hover{background:var(--panel-2)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em}
+.badge-active{background:rgba(76,175,80,.15);color:var(--green)}
+.badge-pending,.badge-provisioning{background:rgba(255,184,0,.15);color:var(--amber)}
+.badge-failed{background:rgba(255,59,31,.15);color:var(--accent)}
+.badge-cancelled,.badge-test-cleanup{background:rgba(154,160,166,.15);color:var(--muted)}
+.btn{padding:5px 10px;background:transparent;border:1px solid var(--border);color:var(--fg);border-radius:6px;font:inherit;font-size:12px;cursor:pointer}
+.btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.refresh{background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+.refresh:hover{color:var(--fg)}
+.pane{display:none}
+.pane.active{display:block}
+.pair-modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:50;padding:24px}
+.pair-modal.open{display:flex}
+.pair-card{background:var(--panel);border:1px solid var(--purple);border-radius:12px;padding:28px;max-width:520px;width:100%}
+.pair-card h3{font-size:18px;margin-bottom:12px}
+.pair-card code{display:block;background:#000;padding:12px;border-radius:6px;word-break:break-all;margin:10px 0;color:var(--cyan);font-size:12px}
+.pair-card .close{float:right;background:transparent;border:0;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><span class="brand-dot"></span>OpsPocket <span class="brand-admin">ADMIN</span></div>
+  <div><a href="/" style="color:var(--muted);font-size:13px">← public site</a></div>
+</div></nav>
+
+<main class="wrap">
+
+<h1>Control Room</h1>
+<p class="sub">Internal. For founders + ops. Everything mutable lives here.</p>
+
+<div class="stats" id="stats"></div>
+
+<div class="tabs">
+  <button class="tab active" data-pane="tenantsPane">Tenants</button>
+  <button class="tab" data-pane="waitlistPane">Waitlist</button>
+  <button class="tab" data-pane="sessionsPane">Active sessions</button>
+</div>
+
+<!-- ── Tenants ──────────────────────────────────────────────────── -->
+<div class="pane active" id="tenantsPane">
+  <div class="toolbar">
+    <button class="refresh" onclick="loadTenants()">↻ Refresh</button>
+    <span class="mono" style="color:var(--muted)" id="tenantCount"></span>
+  </div>
+  <table>
+    <thead><tr>
+      <th>ID</th><th>Customer</th><th>Tier</th><th>Domain</th>
+      <th>IP</th><th>Status</th><th>Created</th><th>Actions</th>
+    </tr></thead>
+    <tbody id="tenantsBody"></tbody>
+  </table>
+</div>
+
+<!-- ── Waitlist ─────────────────────────────────────────────────── -->
+<div class="pane" id="waitlistPane">
+  <div class="toolbar">
+    <button class="refresh" onclick="loadWaitlist()">↻ Refresh</button>
+    <span class="mono" style="color:var(--muted)" id="waitlistCount"></span>
+  </div>
+  <table>
+    <thead><tr><th>When</th><th>Email</th><th>Tier</th></tr></thead>
+    <tbody id="waitlistBody"></tbody>
+  </table>
+</div>
+
+<!-- ── Active sessions ───────────────────────────────────────────── -->
+<div class="pane" id="sessionsPane">
+  <div class="toolbar">
+    <button class="refresh" onclick="loadSessions()">↻ Refresh</button>
+    <span class="mono" style="color:var(--muted)" id="sessionsCount"></span>
+  </div>
+  <table>
+    <thead><tr><th>Email</th><th>Signed in</th><th>Expires</th></tr></thead>
+    <tbody id="sessionsBody"></tbody>
+  </table>
+</div>
+
+</main>
+
+<div class="pair-modal" id="pairModal">
+  <div class="pair-card">
+    <button class="close" onclick="document.getElementById('pairModal').classList.remove('open')">&times;</button>
+    <h3>Fresh pair code</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Send this to the customer — one-tap deep-link for their iPhone:</p>
+    <code id="pairDeepLink"></code>
+    <p style="color:var(--muted);font-size:12px">Expires in <span id="pairExpiry"></span> days. Single-use.</p>
+  </div>
+</div>
+
+<script>
+async function api(path, opts={}){
+  const res = await fetch(path, Object.assign({
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+  }, opts));
+  let data = {};
+  try { data = await res.json(); } catch(_){}
+  return { ok: res.ok, status: res.status, data };
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+    document.getElementById(t.dataset.pane).classList.add('active');
+  });
+});
+
+// ── Tenants ─────────────────────────────────────────────────────
+async function loadTenants(){
+  const r = await api('/api/admin/tenants');
+  if (!r.ok) { alert('Failed: ' + (r.data.error || r.status)); return; }
+  const tb = document.getElementById('tenantsBody');
+  tb.innerHTML = '';
+  document.getElementById('tenantCount').textContent = r.data.count + ' tenant' + (r.data.count === 1 ? '' : 's');
+
+  // Stats
+  const byStatus = {};
+  for (const t of r.data.tenants) byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+  const statsEl = document.getElementById('stats');
+  statsEl.innerHTML = '';
+  const statOrder = [
+    ['Total', r.data.count, ''],
+    ['Active', byStatus.active || 0, 'green'],
+    ['Provisioning', (byStatus.provisioning || 0) + (byStatus.pending || 0), 'amber'],
+    ['Failed', byStatus.failed || 0, 'red'],
+    ['Cancelled/test', (byStatus.cancelled || 0) + (byStatus['test-cleanup'] || 0), ''],
+  ];
+  for (const [label, value, cls] of statOrder) {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value ${cls}">${value}</div>`;
+    statsEl.appendChild(d);
+  }
+
+  for (const t of r.data.tenants) {
+    const tr = document.createElement('tr');
+    const created = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
+    tr.innerHTML = `
+      <td class="mono">${t.id.slice(0,8)}</td>
+      <td>${t.customer_email}</td>
+      <td>${t.tier}</td>
+      <td class="mono">${t.domain || '—'}</td>
+      <td class="mono">${t.hetzner_ip || '—'}</td>
+      <td><span class="badge badge-${t.status}">${t.status}</span></td>
+      <td class="mono">${created}</td>
+      <td>
+        <button class="btn" data-pair="${t.id}">Pair code</button>
+        ${t.domain ? `<a class="btn" href="https://${t.domain}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--fg)">Open UI</a>` : ''}
+      </td>
+    `;
+    tb.appendChild(tr);
+  }
+  document.querySelectorAll('[data-pair]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const tid = b.dataset.pair;
+      b.disabled = true; b.textContent = '…';
+      const r = await api('/api/admin/pair/' + tid, { method: 'POST' });
+      b.disabled = false; b.textContent = 'Pair code';
+      if (!r.ok) { alert('Failed: ' + (r.data.error || r.status)); return; }
+      document.getElementById('pairDeepLink').textContent = r.data.deep_link;
+      document.getElementById('pairExpiry').textContent = r.data.expires_in_days;
+      document.getElementById('pairModal').classList.add('open');
+    });
+  });
+}
+
+// ── Waitlist ────────────────────────────────────────────────────
+async function loadWaitlist(){
+  const r = await api('/api/admin/waitlist');
+  const tb = document.getElementById('waitlistBody');
+  tb.innerHTML = '';
+  document.getElementById('waitlistCount').textContent = (r.data.count || 0) + ' signup' + (r.data.count === 1 ? '' : 's');
+  for (const e of (r.data.entries || [])) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="mono">${e.at}</td><td>${e.email}</td><td>${e.tier || '—'}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// ── Sessions ────────────────────────────────────────────────────
+async function loadSessions(){
+  const r = await api('/api/admin/sessions');
+  const tb = document.getElementById('sessionsBody');
+  tb.innerHTML = '';
+  document.getElementById('sessionsCount').textContent = (r.data.count || 0) + ' active';
+  for (const s of (r.data.sessions || [])) {
+    const tr = document.createElement('tr');
+    const i = new Date(s.issued_at * 1000).toLocaleString();
+    const x = new Date(s.expires_at * 1000).toLocaleString();
+    tr.innerHTML = `<td>${s.email}</td><td class="mono">${i}</td><td class="mono">${x}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// Initial load
+loadTenants();
+loadWaitlist();
+loadSessions();
+</script>
+
+</body>
+</html>

@@ -1,5 +1,10 @@
 # ── Public site: opspocket.com ──────────────────────────────────────
 # Original hand-rolled HTML recovered from the DO droplet.
+# Now also hosts:
+#   /account  — customer self-service dashboard (magic-link login)
+#   /admin    — founder admin panel (Caddy basic-auth gate)
+#   /pair     — one-shot app pairing landing page
+#   /api/*    — opspocket-backend.service (stdlib python on :8092)
 opspocket.com, www.opspocket.com {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
@@ -7,16 +12,50 @@ opspocket.com, www.opspocket.com {
 	@www host www.opspocket.com
 	redir @www https://opspocket.com{uri} 301
 
+	# ── Waitlist API (separate tiny service, :8091) ─────────────────
 	handle /api/waitlist {
 		reverse_proxy 127.0.0.1:8091
 	}
 
-	# OpsPocket Cloud backend — Stripe webhook + future orchestrator APIs.
-	# Service: opspocket-backend.service on 127.0.0.1:8092.
-	handle /api/stripe-webhook {
+	# ── Admin API — Caddy basic_auth guards it at the edge ──────────
+	# Password set with:  caddy hash-password --plaintext '<pw>'
+	# Stored in Caddyfile.d/admin-auth.caddy as the @admin basic_auth
+	# matcher. Falls back to rejecting if the file isn't present yet.
+	@admin_api path /api/admin/*
+	handle @admin_api {
+		basic_auth {
+			# User: craig  (change as needed)
+			# This hash is regenerated with caddy hash-password; replace
+			# before going live. Current placeholder was generated for
+			# password 'opspocket-admin-CHANGE-ME'.
+			craig $2a$14$lbDeLbOfExP66lvOsi9z9.5ycR2J8iKHpKQb5G5NJH1PJhT5pn/rK
+		}
 		reverse_proxy 127.0.0.1:8092
 	}
 
+	# ── Admin web page — also behind basic_auth ─────────────────────
+	@admin_page path /admin /admin.html
+	handle @admin_page {
+		basic_auth {
+			craig $2a$14$lbDeLbOfExP66lvOsi9z9.5ycR2J8iKHpKQb5G5NJH1PJhT5pn/rK
+		}
+		root * /var/www/opspocket.com
+		try_files /admin.html
+		file_server
+	}
+
+	# ── Customer + pair + stripe webhook API (no auth gate; app handles) ─
+	handle /api/stripe-webhook {
+		reverse_proxy 127.0.0.1:8092
+	}
+	handle /api/account/* {
+		reverse_proxy 127.0.0.1:8092
+	}
+	handle /api/pair/* {
+		reverse_proxy 127.0.0.1:8092
+	}
+
+	# ── Static site ─────────────────────────────────────────────────
 	root * /var/www/opspocket.com
 	try_files {path} {path}.html {path}/index.html
 	file_server

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My account — OpsPocket</title>
+<meta name="description" content="Manage your OpsPocket Cloud subscription and tenants.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://opspocket.com/account">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0A0B; --panel:#141416; --panel-2:#1C1C1F; --border:#25252A;
+  --fg:#F5F5F7; --muted:#9AA0A6; --accent:#FF3B1F; --cyan:#00E6FF;
+  --green:#4CAF50; --amber:#FFB800;
+}
+html,body{background:var(--bg);color:var(--fg);font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;line-height:1.5;min-height:100vh}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px}
+code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;background:var(--panel-2);padding:2px 6px;border-radius:4px;color:var(--cyan)}
+.nav{position:sticky;top:0;background:rgba(10,10,11,0.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border);z-index:10}
+.nav-inner{max-width:880px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.brand{font-weight:800;font-size:17px;display:flex;align-items:center;gap:8px;color:var(--fg)}
+.brand-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 12px var(--accent)}
+.nav-right{font-size:13px;color:var(--muted)}
+.nav-right button{background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;font:inherit;cursor:pointer}
+.nav-right button:hover{color:var(--fg);border-color:var(--cyan)}
+.wrap{max-width:880px;margin:0 auto;padding:56px 24px 96px}
+h1{font-size:36px;letter-spacing:-0.02em;font-weight:800;margin-bottom:8px}
+.sub{color:var(--muted);margin-bottom:40px;font-size:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.card h2{font-size:18px;font-weight:700;margin-bottom:14px}
+.card p{color:var(--muted);font-size:14px;margin-bottom:12px}
+input[type=email],input[type=text]{width:100%;padding:12px 14px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--fg);font:inherit;font-size:15px}
+input[type=email]:focus,input[type=text]:focus{outline:none;border-color:var(--cyan)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:#fff;padding:12px 22px;border:0;border-radius:8px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;transition:transform .08s,box-shadow .08s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(255,59,31,.3);text-decoration:none}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--fg)}
+.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:none}
+.btn-small{padding:8px 14px;font-size:13px}
+.tenant{border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:12px;background:var(--panel-2)}
+.tenant-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:12px;flex-wrap:wrap}
+.tenant-title{font-weight:700;font-size:16px}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase}
+.badge-active{background:rgba(76,175,80,.15);color:var(--green);border:1px solid rgba(76,175,80,.3)}
+.badge-pending,.badge-provisioning{background:rgba(255,184,0,.15);color:var(--amber);border:1px solid rgba(255,184,0,.3)}
+.badge-failed,.badge-cancelled{background:rgba(255,59,31,.15);color:var(--accent);border:1px solid rgba(255,59,31,.3)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.muted{color:var(--muted);font-size:13px;line-height:1.7}
+.error{background:rgba(255,59,31,.12);color:#ff8b78;padding:10px 14px;border:1px solid rgba(255,59,31,.3);border-radius:8px;font-size:14px;margin-bottom:12px}
+.success{background:rgba(76,175,80,.12);color:#7bc47f;padding:10px 14px;border:1px solid rgba(76,175,80,.3);border-radius:8px;font-size:14px;margin-bottom:12px}
+.hidden{display:none}
+.pair-result{background:var(--panel-2);border:1px solid var(--cyan);border-radius:10px;padding:16px;margin-top:16px}
+.pair-result code{background:#000;padding:8px 12px;display:block;border-radius:6px;word-break:break-all;margin:8px 0;font-size:11px}
+footer{max-width:880px;margin:48px auto 0;padding:24px;color:var(--muted);font-size:12px;text-align:center;border-top:1px solid var(--border)}
+footer a{color:var(--muted)}
+footer a:hover{color:var(--cyan)}
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/"><span class="brand-dot"></span>OpsPocket</a>
+  <div class="nav-right"><span id="navEmail"></span> <button id="logoutBtn" class="hidden">Sign out</button></div>
+</div></nav>
+
+<main class="wrap">
+
+<!-- ── Signed-out view (default): sign-in form ────────────────────── -->
+<section id="signIn" class="hidden">
+  <h1>Sign in</h1>
+  <p class="sub">Enter the email you used to buy OpsPocket. We'll email you a link to sign in — no password.</p>
+  <div id="loginError" class="error hidden"></div>
+  <div id="loginSuccess" class="success hidden"></div>
+  <div class="card">
+    <form id="loginForm">
+      <input type="email" id="emailInput" placeholder="you@example.com" required autocomplete="email">
+      <div style="margin-top:14px"><button type="submit" class="btn">Email me a link →</button></div>
+    </form>
+  </div>
+  <p class="muted" style="margin-top:16px">
+    New to OpsPocket? See <a href="/cloud">plans</a> · Need help? <a href="/support">support</a>
+  </p>
+</section>
+
+<!-- ── Signed-in view: dashboard ─────────────────────────────────── -->
+<section id="dashboard" class="hidden">
+  <h1>Your account</h1>
+  <p class="sub" id="welcomeSub">Signed in as …</p>
+
+  <div class="card">
+    <h2>Billing</h2>
+    <p>Update card, download invoices, change plan, cancel — all in your Stripe portal.</p>
+    <button id="portalBtn" class="btn btn-ghost">Open billing portal →</button>
+    <span id="portalError" class="error hidden" style="display:inline-block;margin-left:12px"></span>
+  </div>
+
+  <h2 style="font-size:18px;margin:32px 0 14px">Your servers</h2>
+  <div id="tenantsList"></div>
+  <div id="noTenants" class="card hidden">
+    <p class="muted">No servers on this account yet. Waiting on a provisioning email? It usually arrives within 10 minutes of purchase — check your spam folder.</p>
+  </div>
+
+</section>
+
+<!-- ── Verifying-token view ─────────────────────────────────────── -->
+<section id="verifying" class="hidden">
+  <h1>Signing you in…</h1>
+  <p class="sub">One moment.</p>
+</section>
+
+</main>
+
+<footer>
+  © <span id="yr">2026</span> OpsPocket ·
+  <a href="/">Home</a> ·
+  <a href="/cloud">Cloud</a> ·
+  <a href="/support">Support</a>
+</footer>
+
+<script>
+document.getElementById('yr').textContent = new Date().getFullYear();
+
+// ── tiny DOM helpers ────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const show = (id, isShown=true) => $(id).classList.toggle('hidden', !isShown);
+const setError = (id, msg) => { const el = $(id); el.textContent = msg; el.classList.remove('hidden'); };
+const setSuccess = (id, msg) => { const el = $(id); el.textContent = msg; el.classList.remove('hidden'); };
+
+// ── API client ─────────────────────────────────────────────────
+async function api(path, opts={}){
+  const res = await fetch(path, Object.assign({
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+  }, opts));
+  let data = {};
+  try { data = await res.json(); } catch(_){}
+  return { ok: res.ok, status: res.status, data };
+}
+
+// ── Route on load ──────────────────────────────────────────────
+(async function init(){
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+
+  if (token) {
+    // Came from magic-link email. Verify, set cookie, redirect clean.
+    show('verifying', true);
+    const r = await api('/api/account/verify?token=' + encodeURIComponent(token));
+    if (r.ok) {
+      history.replaceState({}, '', '/account');
+      show('verifying', false);
+      await loadDashboard();
+      return;
+    }
+    show('verifying', false);
+    show('signIn', true);
+    setError('loginError', 'That login link has expired or already been used. Request a new one below.');
+    history.replaceState({}, '', '/account');
+    return;
+  }
+
+  // Already-signed-in check.
+  const me = await api('/api/account/me');
+  if (me.ok) {
+    await renderDashboard(me.data);
+  } else {
+    show('signIn', true);
+  }
+})();
+
+// ── Sign-in form ───────────────────────────────────────────────
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('loginError').classList.add('hidden');
+  $('loginSuccess').classList.add('hidden');
+  const email = $('emailInput').value.trim();
+  const r = await api('/api/account/login', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  if (r.ok) {
+    setSuccess('loginSuccess',
+      'Link sent. Check ' + email + ' — it should arrive within 30 seconds.');
+    $('emailInput').value = '';
+  } else {
+    setError('loginError', r.data.error || 'Something went wrong. Try again.');
+  }
+});
+
+// ── Dashboard load ─────────────────────────────────────────────
+async function loadDashboard(){
+  const r = await api('/api/account/me');
+  if (!r.ok) { show('signIn', true); return; }
+  await renderDashboard(r.data);
+}
+
+async function renderDashboard(data){
+  show('signIn', false);
+  show('verifying', false);
+  show('dashboard', true);
+  $('welcomeSub').textContent = 'Signed in as ' + data.email;
+  $('navEmail').textContent = data.email;
+  show('logoutBtn', true);
+
+  const list = $('tenantsList');
+  list.innerHTML = '';
+  const tenants = data.tenants || [];
+  show('noTenants', tenants.length === 0);
+
+  for (const t of tenants) {
+    const div = document.createElement('div');
+    div.className = 'tenant';
+    const statusClass = 'badge-' + t.status;
+    const url = t.url || '#';
+    const isActive = t.status === 'active';
+    div.innerHTML = `
+      <div class="tenant-head">
+        <div>
+          <div class="tenant-title">${t.tier.charAt(0).toUpperCase() + t.tier.slice(1)} · ${t.domain || '(provisioning)'}</div>
+          <div class="muted" style="font-size:12px">Billed ${t.interval === 'year' ? 'annually' : 'monthly'} · Created ${new Date(t.created_at).toLocaleDateString()}</div>
+        </div>
+        <span class="badge ${statusClass}">${t.status}</span>
+      </div>
+      <div class="row">
+        ${isActive ? `<a href="${url}" class="btn btn-ghost btn-small" target="_blank" rel="noopener">Open OpenClaw UI →</a>` : ''}
+        ${isActive ? `<button class="btn btn-ghost btn-small" data-pair="${t.id}">Get iOS app pair code</button>` : ''}
+      </div>
+      <div class="pair-slot"></div>
+    `;
+    list.appendChild(div);
+  }
+
+  // Wire pair buttons.
+  document.querySelectorAll('[data-pair]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tid = btn.dataset.pair;
+      btn.disabled = true; btn.textContent = 'Generating…';
+      const r = await api('/api/account/pair/' + tid, { method: 'POST' });
+      btn.disabled = false;
+      if (!r.ok) { btn.textContent = 'Failed — retry'; return; }
+      const slot = btn.closest('.tenant').querySelector('.pair-slot');
+      slot.innerHTML = `
+        <div class="pair-result">
+          <div style="font-weight:600;margin-bottom:6px">One-shot pair code — expires in ${r.data.expires_in_days} days</div>
+          <div class="muted" style="font-size:13px">On your iPhone, tap this:</div>
+          <code>${r.data.deep_link}</code>
+          <div class="muted" style="font-size:12px">Or if your iPhone asks — open the app manually and paste code: <strong style="color:var(--cyan)">${r.data.code}</strong></div>
+        </div>`;
+      btn.textContent = 'Get iOS app pair code';
+    });
+  });
+}
+
+// ── Billing portal ─────────────────────────────────────────────
+$('portalBtn').addEventListener('click', async () => {
+  $('portalError').classList.add('hidden');
+  const btn = $('portalBtn');
+  btn.disabled = true; btn.textContent = 'Opening…';
+  const r = await api('/api/account/portal', { method: 'POST' });
+  btn.disabled = false; btn.textContent = 'Open billing portal →';
+  if (r.ok && r.data.url) {
+    window.location.href = r.data.url;
+  } else {
+    setError('portalError', r.data.error || 'Portal unavailable');
+  }
+});
+
+// ── Logout ─────────────────────────────────────────────────────
+$('logoutBtn').addEventListener('click', async () => {
+  await api('/api/account/logout', { method: 'POST' });
+  location.reload();
+});
+</script>
+
+</body>
+</html>

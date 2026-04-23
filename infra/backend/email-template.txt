@@ -5,31 +5,43 @@ Hi {{customer_email}},
 
 Your {{tier}} OpsPocket Cloud tenant is provisioned and ready.
 
-CONTROL UI
-----------
+ONE-TAP SETUP (iPhone)
+----------------------
+Tap this on your iPhone to auto-configure the OpsPocket app:
+
+  {{pair_deep_link}}
+
+Or open it in a browser if you don't have the app yet:
+
+  {{pair_web_url}}
+
+(Link is single-use and expires in 7 days. Save the credentials below
+in case you need them.)
+
+CONTROL UI (browser)
+--------------------
 URL:      {{control_ui_url}}
 username: {{username}}
 password: {{password}}
 
-MCP ENDPOINT (for the iOS app)
-------------------------------
+MCP ENDPOINT (advanced — for custom integrations)
+-------------------------------------------------
 endpoint: {{mcp_endpoint}}
 token:    {{mcp_token}}
 
-NEXT STEPS
-----------
-1. Sign in to the Control UI with the credentials above.
-2. Download the iOS app: https://opspocket.com/app
-3. Paste your MCP endpoint and token into the app to pair.
+YOUR ACCOUNT
+------------
+Manage subscription, card, download invoices, generate a new pair code,
+or cancel — sign in at:
 
-BILLING
--------
-Manage your subscription, card, or cancel at any time:
-  {{portal_url}}
+  {{account_url}}
+
+No password needed — we'll email you a sign-in link when you enter your
+email.
 
 NEED HELP?
 ----------
 Reply to this email or write to {{support_email}}.
 
 —
-OpsPocket Cloud · Managed OpenClaw on Hetzner · opspocket.com
+OpsPocket Cloud · Managed OpenClaw · opspocket.com

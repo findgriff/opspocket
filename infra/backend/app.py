@@ -360,9 +360,31 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
         if self.path == "/healthz":
             self._reply(200, b'{"ok":true}')
             return
+        # Delegate /api/account/*, /api/admin/*, /api/pair/* to api_extras.
+        try:
+            import api_extras  # type: ignore
+            if api_extras.handle_get(self):
+                return
+        except Exception as e:
+            log.exception("api_extras GET failed: %s", e)
+            self._reply(500, b'{"error":"server error"}')
+            return
         self._reply(404, b'{"error":"not found"}')
 
     def do_POST(self):
+        # Delegate the account/admin/pair POST surface before falling
+        # through to the Stripe webhook handler below.
+        if self.path.startswith("/api/account/") or \
+           self.path.startswith("/api/admin/"):
+            try:
+                import api_extras  # type: ignore
+                if api_extras.handle_post(self):
+                    return
+            except Exception as e:
+                log.exception("api_extras POST failed: %s", e)
+                self._reply(500, b'{"error":"server error"}')
+                return
+
         if self.path != "/api/stripe-webhook":
             self._reply(404, b'{"error":"not found"}')
             return
@@ -592,7 +614,12 @@ def provision_tenant(tenant: dict) -> None:
         set_status(tenant_id, "active",
                    hetzner_server_id=0, hetzner_ip=fake_ip,
                    notes="dry-run — no real resources created")
-        send_welcome_email(load_tenant(tenant_id))
+        try:
+            import api_extras  # type: ignore
+            pc = api_extras.create_pair_code(tenant_id)
+        except Exception:
+            pc = None
+        send_welcome_email(load_tenant(tenant_id), pair_code=pc)
         return
 
     # 1. Pre-create CF record with a placeholder so DNS is ready when IP known.
@@ -666,8 +693,17 @@ def provision_tenant(tenant: dict) -> None:
     set_status(tenant_id, "active")
     log.info("[%s] active", tenant_id)
 
-    # 7. Welcome email.
-    send_welcome_email(load_tenant(tenant_id))
+    # 7. Pair code for iOS app one-tap onboarding (7-day TTL).
+    pair_code = None
+    try:
+        import api_extras  # type: ignore
+        pair_code = api_extras.create_pair_code(tenant_id)
+        log.info("[%s] pair code issued", tenant_id)
+    except Exception as e:
+        log.warning("[%s] pair code issue failed: %s", tenant_id, e)
+
+    # 8. Welcome email (includes pair deep-link if we got a code).
+    send_welcome_email(load_tenant(tenant_id), pair_code=pair_code)
 
 
 def alert_ops_failure(tenant: dict, reason: str) -> None:
@@ -681,7 +717,7 @@ def alert_ops_failure(tenant: dict, reason: str) -> None:
         log.error("could not send ops alert: %s", e)
 
 
-def send_welcome_email(tenant: Optional[dict]) -> None:
+def send_welcome_email(tenant: Optional[dict], *, pair_code: Optional[str] = None) -> None:
     if not tenant:
         return
     try:
@@ -692,6 +728,10 @@ def send_welcome_email(tenant: Optional[dict]) -> None:
     tmpl_dir = pathlib.Path(__file__).parent
     html = (tmpl_dir / "email-template.html").read_text()
     text = (tmpl_dir / "email-template.txt").read_text()
+    # Pair deep-link for the iOS app. Web-fallback URL opens a page that
+    # explains how to install the app + has a copy-creds button.
+    pair_deep_link = (f"opspocket://pair?code={pair_code}" if pair_code else "")
+    pair_web_url = (f"https://{DOMAIN_ROOT}/pair?code={pair_code}" if pair_code else "")
     vars_ = {
         "customer_email": tenant["customer_email"],
         "tier": tenant["tier"].capitalize(),
@@ -701,7 +741,10 @@ def send_welcome_email(tenant: Optional[dict]) -> None:
         "mcp_endpoint": f"https://{tenant['domain']}/mcp",
         "mcp_token": tenant["gateway_token"] or "",
         "support_email": SUPPORT_EMAIL,
-        "portal_url": "https://billing.stripe.com/p/login/test_opspocket",  # placeholder
+        "portal_url": f"https://{DOMAIN_ROOT}/account",  # magic-link login dashboard
+        "pair_deep_link": pair_deep_link,
+        "pair_web_url": pair_web_url,
+        "account_url": f"https://{DOMAIN_ROOT}/account",
     }
     for k, v in vars_.items():
         html = html.replace("{{" + k + "}}", str(v))
