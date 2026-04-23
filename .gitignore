@@ -48,3 +48,6 @@ secrets/
 *.g.dart
 *.freezed.dart
 __pycache__/
+
+# Claude Code local artefacts
+.claude/
