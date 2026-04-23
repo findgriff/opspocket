@@ -422,38 +422,21 @@
     .ticker-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      font-weight: 600;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 500;
       color: var(--muted);
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      padding-right: 80px;       /* spacer between repeating passes  */
     }
     .ticker-item span { color: var(--red); font-size: 18px; }
     .ticker-item a {
-      color: inherit; text-decoration: none;
-      border-bottom: 1px dotted rgba(255,255,255,0.25);
-      padding-bottom: 1px;
-      transition: color 0.15s;
+      color: inherit;
+      text-decoration: none;
+      transition: opacity 0.15s;
     }
-    .ticker-item a:hover { color: var(--cyan); border-bottom-color: var(--cyan); }
-    /* 'Now available' items — brighter, red bullet */
-    .ticker-item.now { color: #fff; }
-    .ticker-item.now span { color: var(--red); }
-    /* 'Coming soon' items — muted, cyan bullet */
-    .ticker-item.soon { color: var(--muted); }
-    .ticker-item.soon span { color: var(--cyan); font-size: 14px; }
-    .ticker-item.soon::after {
-      content: 'SOON';
-      font-size: 10px;
-      padding: 2px 8px;
-      background: rgba(0,230,255,0.12);
-      border: 1px solid rgba(0,230,255,0.3);
-      border-radius: 999px;
-      color: var(--cyan);
-      margin-left: 6px;
-      letter-spacing: 0.08em;
-    }
+    .ticker-item a:hover { opacity: 0.8; }
+    .ticker-item strong { font-weight: 700; }
 
     /* ── Features ───────────────────────────────────────────────── */
     .features-header { text-align: center; margin-bottom: 70px; }
@@ -982,42 +965,30 @@
   </div>
 </section>
 
-<!-- ── Ticker ─────────────────────────────────────────────────────── -->
+<!-- ── Announcement ticker ───────────────────────────────────────── -->
 <!--
-  Two-tier messaging: "NOW" items are brighter + red bullet + linkable;
-  "SOON" items are muted + cyan bullet + 'SOON' pill. Every item loops
-  twice so the marquee feels seamless.
+  One flowing announcement message, repeated twice for seamless loop.
+  News-ticker style: iPhone app coming soon, Cloud live today, CTA.
 -->
 <div class="ticker-wrap">
   <div class="ticker" id="ticker">
 
-    <!-- ── PASS 1 ─────────────────────────────────────────────────── -->
-    <div class="ticker-item now"><span>✦</span> <a href="/cloud">OpsPocket Cloud — available now</a></div>
-    <div class="ticker-item now"><span>✦</span> OpenClaw out of the box</div>
-    <div class="ticker-item now"><span>✦</span> One-tap managed hosting</div>
-    <div class="ticker-item now"><span>✦</span> <a href="/cloud">Starter from £15.99/mo</a></div>
-    <div class="ticker-item soon"><span>✦</span> iPhone VPS console</div>
-    <div class="ticker-item now"><span>✦</span> Dedicated VPS on Agency</div>
-    <div class="ticker-item soon"><span>✦</span> Mission Control on iOS</div>
-    <div class="ticker-item now"><span>✦</span> Bring your own model keys</div>
-    <div class="ticker-item now"><span>✦</span> Daily automated snapshots</div>
-    <div class="ticker-item soon"><span>✦</span> Slash command palette — iPhone</div>
-    <div class="ticker-item now"><span>✦</span> <a href="/cloud">Annual plans — save 15%</a></div>
-    <div class="ticker-item now"><span>✦</span> 14-day money back</div>
+    <div class="ticker-item"><span>✦</span>
+      <strong style="color:#fff">VPS iPhone app — coming soon.</strong>
+      &nbsp;Meanwhile,
+      <a href="/cloud"><strong style="color:var(--red)">OpenClaw Cloud is available now</strong></a> —
+      managed hosting, one-tap deploy, out of the box.
+      <a href="/cloud" style="color:var(--cyan)"><strong>Check it out →</strong></a>
+    </div>
 
-    <!-- ── PASS 2 (identical — for seamless loop) ────────────────── -->
-    <div class="ticker-item now"><span>✦</span> <a href="/cloud">OpsPocket Cloud — available now</a></div>
-    <div class="ticker-item now"><span>✦</span> OpenClaw out of the box</div>
-    <div class="ticker-item now"><span>✦</span> One-tap managed hosting</div>
-    <div class="ticker-item now"><span>✦</span> <a href="/cloud">Starter from £15.99/mo</a></div>
-    <div class="ticker-item soon"><span>✦</span> iPhone VPS console</div>
-    <div class="ticker-item now"><span>✦</span> Dedicated VPS on Agency</div>
-    <div class="ticker-item soon"><span>✦</span> Mission Control on iOS</div>
-    <div class="ticker-item now"><span>✦</span> Bring your own model keys</div>
-    <div class="ticker-item now"><span>✦</span> Daily automated snapshots</div>
-    <div class="ticker-item soon"><span>✦</span> Slash command palette — iPhone</div>
-    <div class="ticker-item now"><span>✦</span> <a href="/cloud">Annual plans — save 15%</a></div>
-    <div class="ticker-item now"><span>✦</span> 14-day money back</div>
+    <div class="ticker-item"><span>✦</span>
+      <strong style="color:#fff">VPS iPhone app — coming soon.</strong>
+      &nbsp;Meanwhile,
+      <a href="/cloud"><strong style="color:var(--red)">OpenClaw Cloud is available now</strong></a> —
+      managed hosting, one-tap deploy, out of the box.
+      <a href="/cloud" style="color:var(--cyan)"><strong>Check it out →</strong></a>
+    </div>
+
   </div>
 </div>
 
