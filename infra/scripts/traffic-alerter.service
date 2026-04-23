@@ -1,9 +1,0 @@
-[Unit]
-Description=OpsPocket — Hetzner traffic overage alert
-After=network-online.target
-
-[Service]
-Type=oneshot
-# Ensure the Hetzner sync has fresh traffic data before we alert on it.
-ExecStartPre=/usr/bin/curl -fsS --max-time 60 -u "craig:$(cat /etc/opspocket/admin-creds.txt | awk -F= '/^PASSWORD=/ {print $2}')" -X POST https://opspocket.com/api/admin/sync/hetzner
-ExecStart=/usr/local/bin/opspocket-traffic-alerter.sh

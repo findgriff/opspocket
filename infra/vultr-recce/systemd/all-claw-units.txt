@@ -1,2 +1,0 @@
-/etc/systemd/system/default.target.wants/code-server@openclaw.service
-/etc/systemd/system/code-server@openclaw.service.d

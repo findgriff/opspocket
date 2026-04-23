@@ -1,9 +1,0 @@
-# OpsPocket dev box — main Caddy config.
-# Per-site configs live in /etc/caddy/Caddyfile.d/*.caddy
-# CLOUDFLARE_API_TOKEN comes from /etc/caddy/cloudflare.env (systemd env file)
-
-{
-	email findgriff@gmail.com
-}
-
-import Caddyfile.d/*.caddy

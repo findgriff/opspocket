@@ -1,3 +1,17 @@
+> **⚠ REPO SCOPE — 2026-04-23**
+>
+> This is the **OpsPocket iPhone app** repo (Flutter/iOS). The SaaS
+> platform (backend, marketing site, admin panel, tenant installer) was
+> split out to a separate repo: <https://github.com/findgriff/opspocket-platform>.
+>
+> Sections below that refer to dev-box operations, Caddy, Stripe, Hetzner
+> API, customer dashboards, /admin, /account, or `infra/backend/*` are
+> out of scope here — look for them in the platform repo. Everything
+> about the Flutter app, Xcode, iOS device install, Keychain, SSH
+> client interface, and `lib/features/*` is still canonical here.
+
+---
+
 # CLAUDE.md — OpsPocket Agent Operating Instructions
 
 You are the next Claude agent on the OpsPocket project. **Read `HANDOVER.md` first** for full project state. This document is your operating manual — what to do, what not to do, how the environment works.

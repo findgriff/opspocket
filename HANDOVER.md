@@ -1,3 +1,17 @@
+> **⚠ REPO SCOPE — 2026-04-23**
+>
+> This is the **OpsPocket iPhone app** repo (Flutter/iOS). The SaaS
+> platform (backend, marketing site, admin panel, tenant installer) was
+> split out to a separate repo: <https://github.com/findgriff/opspocket-platform>.
+>
+> Sections below that refer to dev-box operations, Caddy, Stripe, Hetzner
+> API, customer dashboards, /admin, /account, or `infra/backend/*` are
+> out of scope here — look for them in the platform repo. Everything
+> about the Flutter app, Xcode, iOS device install, Keychain, SSH
+> client interface, and `lib/features/*` is still canonical here.
+
+---
+
 # HANDOVER — OpsPocket iPhone App + Platform
 
 **Last updated:** 2026-04-23
