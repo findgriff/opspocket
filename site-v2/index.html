@@ -296,7 +296,8 @@
       align-items: center;
       position: relative;
       overflow: hidden;
-      padding-top: 72px;
+      /* Ticker (above) now provides the 72px clearance for the fixed nav. */
+      padding-top: 20px;
     }
     .hero-bg {
       position: absolute;
@@ -400,6 +401,7 @@
     .hero-ring-2 { width: 140%; height: 140%; top: -20%; left: -20%; animation-duration: 30s; animation-direction: reverse; border-color: rgba(0,230,255,0.08); }
 
     /* ── Ticker ─────────────────────────────────────────────────── */
+    /* Sits directly under the fixed nav (nav height = 72px).      */
     .ticker-wrap {
       overflow: hidden;
       background: rgba(255,59,31,0.05);
@@ -408,6 +410,7 @@
       padding: 14px 0;
       position: relative;
       z-index: 1;
+      margin-top: 72px;                /* clear the fixed nav */
     }
     .ticker {
       display: flex;
@@ -896,6 +899,33 @@
   </div>
 </nav>
 
+<!-- ── Announcement ticker (right below the nav, above everything) ── -->
+<!--
+  Single flowing announcement: iPhone app coming soon, Cloud live today,
+  CTA. Repeated twice in the track for a seamless marquee loop.
+-->
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">
+
+    <div class="ticker-item"><span>✦</span>
+      <strong style="color:#fff">VPS iPhone app — coming soon.</strong>
+      &nbsp;Meanwhile,
+      <a href="/cloud"><strong style="color:var(--red)">OpenClaw Cloud is available now</strong></a> —
+      managed hosting, one-tap deploy, out of the box.
+      <a href="/cloud" style="color:var(--cyan)"><strong>Check it out →</strong></a>
+    </div>
+
+    <div class="ticker-item"><span>✦</span>
+      <strong style="color:#fff">VPS iPhone app — coming soon.</strong>
+      &nbsp;Meanwhile,
+      <a href="/cloud"><strong style="color:var(--red)">OpenClaw Cloud is available now</strong></a> —
+      managed hosting, one-tap deploy, out of the box.
+      <a href="/cloud" style="color:var(--cyan)"><strong>Check it out →</strong></a>
+    </div>
+
+  </div>
+</div>
+
 <!-- ── Mobile Menu ────────────────────────────────────────────────── -->
 <div class="mobile-menu" id="mobileMenu">
   <a href="#features" onclick="toggleMenu()">Features</a>
@@ -964,33 +994,6 @@
     </div>
   </div>
 </section>
-
-<!-- ── Announcement ticker ───────────────────────────────────────── -->
-<!--
-  One flowing announcement message, repeated twice for seamless loop.
-  News-ticker style: iPhone app coming soon, Cloud live today, CTA.
--->
-<div class="ticker-wrap">
-  <div class="ticker" id="ticker">
-
-    <div class="ticker-item"><span>✦</span>
-      <strong style="color:#fff">VPS iPhone app — coming soon.</strong>
-      &nbsp;Meanwhile,
-      <a href="/cloud"><strong style="color:var(--red)">OpenClaw Cloud is available now</strong></a> —
-      managed hosting, one-tap deploy, out of the box.
-      <a href="/cloud" style="color:var(--cyan)"><strong>Check it out →</strong></a>
-    </div>
-
-    <div class="ticker-item"><span>✦</span>
-      <strong style="color:#fff">VPS iPhone app — coming soon.</strong>
-      &nbsp;Meanwhile,
-      <a href="/cloud"><strong style="color:var(--red)">OpenClaw Cloud is available now</strong></a> —
-      managed hosting, one-tap deploy, out of the box.
-      <a href="/cloud" style="color:var(--cyan)"><strong>Check it out →</strong></a>
-    </div>
-
-  </div>
-</div>
 
 <!-- ── Stats ──────────────────────────────────────────────────────── -->
 <section class="stats-section section-sm">
