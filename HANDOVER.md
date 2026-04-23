@@ -1,509 +1,683 @@
-# OpsPocket — Project Handover
+# HANDOVER — OpsPocket iPhone App + Platform
 
-**Last updated:** 2026-04-22 (audit pass by Lead DevOps)
-**Bundle ID (app):** co.opspocket.opspocket
-**Flutter:** 3.41.7 / Dart 3.11.5
+**Last updated:** 2026-04-23
+**Last session owner:** Claude (Lead DevOps / SaaS Platform Engineer role)
+**Primary product this document focuses on:** OpsPocket iPhone app (Flutter)
+**Secondary:** OpsPocket Cloud platform — just enough context for a new agent to not break it
 
----
+This document is the single source of truth for project state. A new agent should read **this file first**, then `CLAUDE.md`, then start work.
 
-## Project Overview
+**Accuracy contract used throughout this file:**
 
-OpsPocket is now two products under one brand:
-
-- **OpsPocket (App)** — Flutter iOS SSH/VPS console for managing VPS servers, bots and AI services (OpenClaw/Clawbot). Shipping.
-- **OpsPocket Cloud** — managed OpenClaw hosting on Hetzner. Waitlist-stage; marketing site live, auto-provisioning orchestrated by `infra/provision-tenant.sh`. Not yet billable.
-
-Both share the same repository. The iOS app is unchanged since 2026-04-17; all work this session has been on Cloud infra, the marketing site migration, and a 6-site consolidation off DigitalOcean.
+- ✅ **Verified** — directly observed or ran the command this session
+- 🟡 **Likely** — stated consistently across prior sessions but not re-verified today
+- ❓ **Unknown** — must be checked before relying on it
 
 ---
 
-## Architecture
+## 1. Project overview
 
-### iOS app stack (unchanged)
+OpsPocket is two products under one brand, in one git repo:
 
-- **State management:** Riverpod (`StateNotifierProvider.family` per server)
-- **Routing:** GoRouter (`lib/app/router/app_router.dart`)
-- **SSH:** `dartssh2`, accessed only via the `SshClient` interface (`lib/features/ssh/domain/ssh_client.dart`)
-- **Database:** Drift (SQLite) — regenerate with `dart run build_runner build --delete-conflicting-outputs`
-- **Secrets:** `flutter_secure_storage` (iOS Keychain) — see `lib/shared/storage/secure_storage.dart`
-- **Theme:** `lib/app/theme/app_theme.dart` — OpsClaw palette (red/black/cyan), JetBrains Mono throughout
-- **Feature modules** (`lib/features/`): `server_profiles`, `ssh`, `terminal`, `command_templates`, `splash`, `tunnel`, `mission_control`, `quick_actions`, `server_health`, `logs`, `files`, `audit`, `auth_security`, `settings`
+- **OpsPocket iPhone app** — Flutter/iOS mobile client. SSH + web-tunnel + quick actions for managing a VPS from your phone. Bundle ID `co.opspocket.opspocket`. Shelved for public release; usable as a tech demo on the founder's own iPhone.
+- **OpsPocket Cloud** — SaaS that provisions a dedicated Hetzner VPS per customer, installs OpenClaw via `install-openclaw.sh`, emails credentials, and exposes a customer dashboard + admin CRM at `opspocket.com`. Billing via Stripe (live). Not yet generating revenue but is technically ready for a first real sale.
 
-### Cloud stack (new)
-
-- **Host:** single Hetzner CX43 in Nuremberg, `opspocket-dev` at `178.104.242.211`. Currently doubles as developer workshop, production host for the marketing site and migrated legacy sites, and test harness for tenant provisioning.
-- **Provisioning:** `infra/install-openclaw.sh` — idempotent installer that brings up OpenClaw + Docker + Caddy + Cloudflare DNS-01 TLS on a bare Ubuntu 24.04 Hetzner VPS. Supports `MODEL_PROVIDER=ollama` for free-tier builds.
-- **Orchestration:** `infra/provision-tenant.sh` — manual-MVP onboarding. Creates a Hetzner VM, points a Cloudflare A record at it, runs the installer over SSH, writes tenant record to `infra/tenants.json`.
-- **Interactive first-run:** `infra/first-deploy.sh` — wizard around `provision-tenant.sh` for the very first Hetzner deploy.
-- **TLS:** Caddy with the Cloudflare DNS-01 plugin. Single `CLOUDFLARE_API_TOKEN` held in `/etc/caddy/cloudflare.env` on the dev box.
-- **Multi-site Caddy:** per-site configs in `/etc/caddy/Caddyfile.d/*.caddy`, source-of-truth at `infra/caddy-sites/`. Main `Caddyfile` just does `import Caddyfile.d/*.caddy`.
-- **Waitlist backend:** `infra/waitlist-server.py` (48-line Python HTTP service on 127.0.0.1:8091), systemd unit `infra/opspocket-waitlist.service`. Appends to `/var/lib/opspocket/waitlist.txt`.
-- **Test harness:** `infra/test-installer.sh` — smoke-test that drives `install-openclaw.sh` end-to-end on a disposable `*.dev.opspocket.com` subdomain.
+The iPhone app and the Cloud platform are independent — the app works against any SSH-accessible box with OpenClaw installed, not just Cloud tenants.
 
 ---
 
-## Sites currently served from the dev box
+## 2. Current status — iPhone app
 
-All TLS via Let's Encrypt with Cloudflare DNS-01. Per-site Caddy configs at `infra/caddy-sites/`.
+### Verified state on 2026-04-23
 
-| File | Hostnames | Backend | Purpose |
-|---|---|---|---|
-| `opspocket.caddy` | opspocket.com, www | static `/var/www/opspocket.com` + `/api/waitlist` → 127.0.0.1:8091 | Public marketing + Cloud waitlist |
-| `dev.caddy` | hello.dev.opspocket.com, *.dev.opspocket.com | respond | Dev-box health, test-tenant catch-all |
-| `dafc.caddy` | darleyabbeyfc.com, www | static `/var/www/darleyabbeyfc.com` | Darley Abbey FC |
-| `dafc-forms.caddy` | forms.darleyabbeyfc.com | 127.0.0.1:5102 | DAFC forms handler |
-| `forms-api.caddy` | forms.aressentinel.com | 127.0.0.1:5103 | Forms API + MariaDB |
-| `glowpower.caddy` | glowpower.co.uk, www | 127.0.0.1:5100 | Glow Power site |
-| `magichairstyler.caddy` | magichairstyler.com, www | static `/var/www/magichairstyler.com` | Magic Hair Styler |
-| `vantabiolabs.caddy` | vantabiolabs.xyz, www | 127.0.0.1:5101 | Vanta Bio Labs |
+- App **builds cleanly in release mode** after clearing xattrs on the project dir (known macOS issue — see §7).
+- App **installs on physical iPhone** via `xcrun devicectl device install app` — bypasses Flutter's flaky wireless installer.
+- App **launches and reaches the server list** after the user trusts the dev cert once (Settings → General → VPN & Device Management).
+- App **SSH-connects** successfully as user `apptest` on the dev box (password auth) — verified terminal returns `hostname` = `opspocket-dev`.
+- **Server Health tiles** (CPU / RAM / Disk / Uptime) populate live from `/proc` after SSH connects.
+- **ClawGate tunnel** to OpenClaw UI is **working** — user confirmed: "the openclaw UI works".
+- **Mission Control** via ClawGate tunnel works in the same way (same backend, same auth).
+- **97 → 85 → 79 → current tests pass** (count has fluctuated as features were deleted/added; see §6).
 
-Reverse-proxy port map and full details in `infra/caddy-sites/README.md`.
+### What the app currently shows (verified layout on physical device)
 
----
+Running on Craig's iPhone 14 Pro Max, iOS 26.4.1:
 
-## What's live for Cloud
+1. Splash (logo animation, ~4 s)
+2. Server list
+3. Server detail screen with:
+   - SSH: connected banner
+   - Server Health card (CPU / RAM / Disk / Uptime tiles, live)
+   - Quick Actions tile
+   - Terminal tile
+   - Mission Control card with Update button (routes to DeployScreen)
+   - Tunnel pill row (OpenClaw UI + Mission destinations)
+   - SSH Connect / Disconnect buttons
 
-### Marketing site
-
-- `https://opspocket.com` — hand-rolled `site-v2/index.html` (1700+ lines, preserved from the DO original). Added:
-  - Cloud link in the main nav
-  - "Managed Cloud" band between hero and ticker
-  - Extended schema.org `Offer` array covering Cloud tiers
-- `https://opspocket.com/cloud` — new `site-v2/cloud.html`, same visual language as the homepage: pricing grid with monthly/annual toggle, how-it-works, feature grid, competitor comparison, FAQ, waitlist modal
-- `https://opspocket.com/blog/*` — 4 original posts preserved verbatim (mission-control, getting-started-ssh, marketing-pipeline, the-bridge)
-- `POST /api/waitlist` — writes to `/var/lib/opspocket/waitlist.txt` on the dev box
-
-### Pricing tiers (GBP; not yet billable)
-
-| Tier | Monthly | Annual | App bundled? | Hetzner type |
-|---|---|---|---|---|
-| Starter | £15.99/mo | £176.59/yr (~£14.72/mo) | ✓ free with annual only | CPX22 (2 vCPU / 4 GB / 80 GB) |
-| Pro | £22.99/mo | £234.50/yr (15% off) | ✓ always | CPX32 (4 vCPU / 8 GB / 80 GB) |
-| Agency | £34.99/mo | £356.90/yr (15% off) | ✓ always | CPX42 (8 vCPU / 16 GB / 160 GB) |
-
-Full rationale and design: `docs/superpowers/specs/2026-04-22-opspocket-site-migration-design.md`.
+Files (SFTP) tile is NOT currently in the layout — the underlying WIP module was deleted on 2026-04-23 when it blocked the release build (see §4).
 
 ---
 
-## Testing infrastructure
+## 3. Completed
 
-### `infra/test-installer.sh`
+### Features shipped in the app
 
-Smoke-tests `install-openclaw.sh` end-to-end:
+- SSH connect / disconnect with password + private-key auth; credentials stored in iOS Keychain (accessibility: `first_unlock_this_device`)
+- Terminal screen with slash-command palette (40+ builtins: systemd, Docker, PM2, tmux, nginx, OpenClaw CLI)
+- Quick Actions grid (one-tap commands)
+- Server Health tiles (live CPU / RAM / disk / uptime from `/proc`)
+- Logs screen (journald/docker/PM2 tails)
+- Audit log
+- Biometric unlock on relaunch (local_auth)
+- ClawGate SSH-tunnel to WebView
+  - Two destinations: **OpenClaw UI** and **Mission Control** — both tunnel to the OpenClaw daemon on `127.0.0.1:18789` (unified 2026-04-23)
+  - Handles `gateway.auth.mode = "none"` (basic-auth via Caddy) — token fetch tolerated as optional
+  - WebView shows a basic-auth prompt; customer types `clawmine` password
+- Mission Control credential wiring in server profile:
+  - Optional OpenClaw host override (falls back to SSH host)
+  - clawmine password, both stored in Keychain under `SecretKeys.clawmineHost(<id>)` and `SecretKeys.clawminePassword(<id>)`
+- Deploy Mission Control flow (`DeployScreen` + `deploy_notifier`) — SSH-driven git clone + rebuild
+- Builtin template system + Drift (SQLite) persistence for user-added templates
 
-1. Spawns a throwaway Hetzner VM
-2. Allocates a test subdomain under `*.dev.opspocket.com`
-3. SSHes in and runs the installer
-4. Verifies OpenClaw gateway responds on the tenant URL
-5. Destroys the VM
+### Infrastructure completed
 
-Use before merging any installer change. It is the only way to catch regressions in the installer short of real tenant provisioning.
+- Full OpsPocket Cloud SaaS platform — Stripe live, Hetzner provisioning, Resend email, Caddy TLS multi-site. See §15 for a brief overview.
+- Customer dashboard at `opspocket.com/account` (magic-link auth)
+- Admin CRM at `opspocket.com/admin` (Caddy basic_auth)
+- Device pairing deep-link flow (`opspocket://pair?code=…`) — backend generates + stores; app side needs Info.plist URL scheme + pair handler (not yet built, see §5)
 
-```bash
-./infra/test-installer.sh
-```
+### Verified decisions from prior sessions
 
----
-
-## All changes since 2026-04-17
-
-Chronological, newest last:
-
-1. **`3e374f7` Update all logos to OpsPocket official branding** — replaced placeholder logos app-wide.
-2. **`be51dfe` Replace OpenClaw UI tunnel logo with new OpsPocket branding** — updated the tunnel screen asset.
-3. **`7af0c33` feat(site+infra): landing site + managed-VPS installer scaffold** — first cut of the Next.js landing site and the `install-openclaw.sh` scaffold.
-4. **`7547c6f` feat(infra): nginx config + one-shot deploy script for the landing site** — initial deploy path (since superseded by Caddy).
-5. **`76be5ee` feat(infra): vps-build-site.sh — pull + build on the VPS itself** — pull/build helper on target VPS.
-6. **`ad9f9b0` chore(infra): build site from main (now that landing-site is merged)** — aligned build branch.
-7. **`9b0af49` fix(infra): handle branch switch when VPS checkout was previously on landing-site** — resilience for re-deploys.
-8. **`dead9d5` chore(infra): capture Vultr Marketplace OpenClaw install blueprint** — reference material under `infra/vultr-recce/`.
-9. **`3b3468d` chore(infra): capture OpenClaw-generated installer script + review** — baseline for rewriting the installer.
-10. **`78a0414` fix(infra): install-openclaw.sh — all 8 bugs from REVIEW.md fixed** — hardening pass on the installer.
-11. **`06f5187` feat(infra): provision-tenant.sh — manual onboarding MVP** — single-command tenant provisioning.
-12. **`42bbc15` feat(infra): first-deploy.sh — interactive wizard for first Hetzner deploy** — guided first-run.
-13. **`1846645` feat(infra): install-openclaw.sh — add MODEL_PROVIDER=ollama for free-tier deploys** — lets Starter tier run local Ollama instead of paid OpenAI.
-14. **`73c4cc0` feat(infra): dev box + installer fixes from Hetzner dry-run** — fixes discovered during the first live Hetzner run.
-15. **`5d1378a` docs(spec): opspocket.com migration + Cloud pricing design** — design doc for this session's work.
-16. **`403b6b7` feat(site): migrate opspocket.com to dev box + add Cloud pricing page** — swung the marketing site onto the dev box, added `/cloud`.
-17. **`925aabe` feat(infra): migrate 6 sites off DigitalOcean Dokku → Hetzner dev box** — six-site parallel cutover. Details in `infra/MIGRATION-LOG.md`.
+- Native Mission Control screen (`mc_screen.dart` + tabs + SSH-backed `mc_repository`) was **deleted** on 2026-04-23. Mission Control is now a tunneled WebView of OpenClaw's own Control UI. Rationale in commit `2bf2934`.
+- Legacy nginx `/mission-control` path is abandoned — both `TunnelTarget.clawbot` and `TunnelTarget.missionControl` point to `127.0.0.1:18789`.
+- iOS app is **shelved for public release** — user decided this session. The Flutter code stays in-repo; Cloud is the near-term revenue product.
+- Cloud sticks with **per-VPS-per-customer** model. Shared-host Docker pivot is deferred until 5+ paying customers.
 
 ---
 
-## SaaS CRM v2 — full CRM shipped 2026-04-23 ✅✅
+## 4. Partially completed
 
-On top of the earlier self-serve + admin + pair work, the platform now has a **real CRM**: Stripe + Hetzner data synced locally, per-tenant deep drawer, notes/tasks, audit log, analytics dashboard, customer profile editing, and in-app support tickets.
+### SFTP / Files feature — **DO NOT re-enable as-is**
 
-### Data sources + sync
+- Files present in prior commits: `lib/features/files/*`, `lib/features/ssh/domain/sftp_session.dart`, `lib/features/ssh/data/sftp_session_impl.dart`, `test/sftp_path_test.dart`
+- **Deleted on 2026-04-23** (commit `f334c92`) because they blocked the release build with three Dart errors:
+  1. `lib/features/files/presentation/sftp_browser_screen.dart:3` — `package:file_picker/file_picker.dart` not in `pubspec.yaml`
+  2. `lib/features/files/presentation/sftp_browser_screen.dart:285` — `FilePicker` getter undefined
+  3. `lib/features/files/presentation/sftp_notifier.dart:36` — `SshClient.openSftp()` method does not exist on the interface
+- To complete: add `file_picker` to `pubspec.yaml`, implement `sftp()` or `openSftp()` on `SshClient` (`lib/features/ssh/domain/ssh_client.dart`) + `SshClientImpl`, restore deleted files from commit predating `f334c92` (they were uncommitted until then — history starts with commit that added them to Git, so check git log carefully), re-add Files tile to `server_detail_screen.dart`, re-add `/files` route to `app_router.dart`.
 
-- **Stripe live data** is pulled into `stripe_customers`, `stripe_subscriptions`, `stripe_invoices`, `stripe_charges` tables. `POST /api/admin/sync/stripe` refreshes from the API. Module: `infra/backend/sync_stripe.py`.
-- **Hetzner live data** is pulled into `hetzner_servers` and `hetzner_snapshots`. `POST /api/admin/sync/hetzner` refreshes. Module: `infra/backend/sync_hetzner.py`.
-- Both can be triggered from the admin panel's header buttons. Every sync is audit-logged with counts.
+### App-side pairing handler — **backend ready, app side stub**
 
-### New tables (12 in total)
+- Backend emits `opspocket://pair?code=<code>` in welcome emails. Single-use, 7-day TTL, full tenant creds in the payload.
+- App needs (all unbuilt):
+  - URL scheme registered in `ios/Runner/Info.plist` (`CFBundleURLTypes` → scheme `opspocket`)
+  - Deep-link handler screen in Flutter (`lib/features/pairing/`)
+  - Fetch `/api/pair/<code>` → write server profile + Keychain entries → show success
+- Design: fetch once, never store the code, write `clawmine.pwd.<id>` + `clawmine.host.<id>` + SSH creds to Keychain, then route to `/servers/<id>`.
+- Server-side also supports web fallback at `https://opspocket.com/pair?code=…` which shows credentials in a one-shot web page (already live).
 
-```
-customers           — company profile + CRM lifecycle + health score
-crm_notes           — free-form notes, pinnable, per tenant or customer
-crm_tasks           — admin task list with priority + owner
-stripe_customers    — cache of Stripe customer objects
-stripe_subscriptions— cache of all subs incl. cancelled
-stripe_invoices     — cache for billing history in /account
-stripe_charges      — cache for failed-payments visibility
-hetzner_servers     — live server specs + status
-hetzner_snapshots   — backup inventory
-audit_log           — every admin mutation (actor, action, target, IP, detail)
-tenant_activity     — future-proof usage event log
-support_tickets     — customer-created tickets (email on create)
-feature_flags       — per-tenant enable/disable
-gdpr_requests       — data subject requests
-```
+### Mission Control UI polish
 
-### API surface — new endpoints on top of v1
-
-```
-GET  /api/admin/tenants/<id>            — deep detail: tenant + Stripe + Hetzner + notes/tasks/audit
-GET  /api/admin/tenants/<id>/notes
-GET  /api/admin/tenants/<id>/tasks
-GET  /api/admin/tenants/<id>/activity
-GET  /api/admin/customers
-POST /api/admin/customers               — upsert CRM profile
-GET  /api/admin/audit?limit=N
-GET  /api/admin/analytics               — MRR/ARR/churn/failed-payments/tenant-status
-GET  /api/admin/support
-GET  /api/admin/tasks
-POST /api/admin/sync/stripe
-POST /api/admin/sync/hetzner
-POST /api/admin/notes
-POST /api/admin/tasks
-POST /api/admin/tasks/<id>/complete
-POST /api/admin/tenants/<id>/impersonate   — issue magic-link as that customer
-POST /api/admin/tenants/<id>/cancel        — cancel Stripe subscription immediately
-POST /api/admin/tenants/<id>/flags         — set feature flag
-
-GET  /api/account/profile               — customer's CRM profile
-POST /api/account/profile               — self-edit
-GET  /api/account/invoices              — billing history from cache
-POST /api/account/support               — create support ticket + email ops
-```
-
-### Admin UI — new `/admin` capabilities
-
-Single-page app with 7 tabs:
-1. **Dashboard** — live MRR/ARR, active/trialing/past_due/cancelled counts, failed-payment total, 30-day trials + churn, waitlist, tenant-status breakdown
-2. **Tenants** — filterable table; click a row to open a full detail drawer
-3. **Customers** — CRM list (company / lifecycle / health score / tenant count)
-4. **Tasks** — all open tasks across all customers, priority-sorted
-5. **Support** — ticket queue, status-sorted
-6. **Waitlist** — pre-signup emails
-7. **Audit** — full actor/action/target/IP/detail log
-
-**Tenant detail drawer** (click any tenant):
-- Overview (tier, status, domain, created)
-- **Actions row**: impersonate, new pair code, cancel subscription, toggle flags
-- Billing block: customer, subscription, invoices table, charges table
-- Infrastructure block: server type + specs + datacenter + snapshot count
-- CRM profile block with one-click edit
-- Notes list (add pinned or normal)
-- Tasks list (add + complete)
-- Audit trail scoped to this tenant
-
-Header has **Sync Stripe** + **Sync Hetzner** buttons for on-demand refresh.
-
-### Customer UI — new `/account` capabilities
-
-- **Your servers** tiles with pair-code generator + Open UI link
-- **Billing portal** one-click Stripe Customer Portal session
-- **Invoices** list pulled from local Stripe cache — PDF + hosted URL links
-- **Company profile** form — 9 editable fields (company, contact, phone, website, industry, VAT, country, billing address, marketing consent) — saved to `customers` table
-- **Contact support** form — creates a ticket + emails `hello@opspocket.com`
-
-### End-to-end validated on 2026-04-23
-
-```
-✅ POST /api/account/login         → magic-link email sent via Resend
-✅ GET  /api/account/verify?token= → session cookie issued
-✅ POST /api/account/profile       → customers row upserted
-✅ GET  /api/account/profile       → roundtrip returns saved fields
-✅ POST /api/account/support       → ticket created, ops email fired
-✅ POST /api/admin/sync/stripe     → 1 customer + 1 invoice + 1 charge pulled
-✅ POST /api/admin/sync/hetzner    → 1 server + 2 snapshots pulled
-✅ GET  /api/admin/analytics       → MRR/ARR/churn computed from cache
-✅ GET  /api/admin/tenants/:id     → full deep view with all joined data
-✅ POST /api/admin/notes           → note written + audited
-✅ POST /api/admin/tasks           → task written + audited
-✅ POST /api/admin/tasks/:id/complete → status updated + audited
-✅ POST /api/admin/tenants/:id/impersonate → magic-link URL returned
-✅ POST /api/admin/tenants/:id/flags → feature flag toggled + audited
-✅ GET  /api/admin/audit           → 4+ audit events captured
-✅ Admin UI loads, all 7 tabs functional
-✅ Customer UI loads, profile/invoices/support all functional
-```
-
-### What's NOT built (explicit phase-2 list)
-
-These were in the spec but deliberately scoped out — each with rationale:
-
-- **Full sales pipeline (deals/stages/proposal tracking)** — zero paying customers today; CRM lifecycle field + notes cover current needs. Re-evaluate at 20+ customers.
-- **SMS/WhatsApp/call-log integration** — overkill for founder-led support; email + internal notes do the job at current scale.
-- **Marketing email campaigns + sequences** — Resend is set up for transactional; marketing sends would add compliance burden without clear payoff yet.
-- **Meeting scheduler / calendar** — Calendly link in email signature is sufficient.
-- **Contract/NDA/proposal document management** — drop files into Google Drive; add document vault if/when it becomes a friction point.
-- **SLA response-time tracking** — tickets exist, but no automated SLA timer yet.
-- **Chat transcript storage** — no live chat; email-only support.
-- **Real-time presence** — active sessions list is sufficient.
-- **User impersonation with full UI takeover** — current impersonation issues a customer magic-link; sufficient for support.
-- **Full MFA for admin** — Caddy basic_auth is single-founder; add TOTP when team grows.
-- **Per-user roles inside customer accounts** — customers today have one login per email; seat management UI is phase-2 when we support teams.
-- **Integrations marketplace (Slack/Discord/Telegram wiring)** — re-visit once 5+ paying customers are asking for it.
-- **Shared-host Docker pivot** — per-VPS stays until 5+ paying customers.
-
-### Files added / modified — summary
-
-**Backend (`infra/backend/`):**
-- `schema.sql` — extended from 5 → 19 tables
-- `api_extras.py` — ~1,400 lines (from ~600) covering all new endpoints
-- `sync_stripe.py` — **new** (~250 lines)
-- `sync_hetzner.py` — **new** (~160 lines)
-- `app.py` — unchanged except dispatch wiring
-
-**Frontend (`site-v2/`):**
-- `admin.html` — full rewrite: 7-tab SPA + tenant drawer + sync/action buttons (~600 lines)
-- `account.html` — expanded: invoices + profile + support (~480 lines)
-
-### Admin + test credentials
-
-- Admin: `craig` / `OMfZQSbUT89Nz5k4xv` at `https://opspocket.com/admin`
-- Test customer used in verification: `findgriff+crmtest@gmail.com` (created in customers table via magic-link flow)
-- Rotate admin password: `ssh dev 'caddy hash-password --plaintext "NEW"'` then update `infra/caddy-sites/opspocket.caddy` + `systemctl reload caddy`.
+- Feature works; UI could be better. Loading/error states in the WebView are minimal. No tool-call telemetry panel. Acceptable for v1, not for a polished public release.
 
 ---
 
-## SaaS CRM v1 — shipped 2026-04-23 ✅
+## 5. Known issues / broken / fragile
 
-**The three biggest unblocked items from the blocked-saas-ui spec are now live.** Every Cloud customer now has a working self-service account; every founder-side operation is now visible in the admin panel; every welcome email now carries a one-tap iPhone deep-link that auto-configures the OpsPocket app.
+### iOS 26 wireless debug install hangs black
 
-### What shipped
+- `flutter run --debug --device-id <UDID>` over WiFi installs the app but the app sits on a black screen forever.
+- **Root cause:** Flutter debug builds include a stub that waits on the Dart VM service. Over WiFi on iOS 26 the handshake is flaky; when it fails, `runApp()` never fires.
+- **Workarounds (both verified working this session):**
+  1. Use **release mode** (`flutter build ios --release` + `xcrun devicectl device install app build/ios/iphoneos/Runner.app`) — has no VM service dependency
+  2. Use **a cable** for debug-mode development
 
-| Piece | Location | Auth | Status |
-|---|---|---|---|
-| **Customer dashboard** | `https://opspocket.com/account` | Magic-link (email) → 30-day session cookie | ✅ live |
-| **Admin panel** | `https://opspocket.com/admin` | Caddy `basic_auth` at the edge | ✅ live |
-| **Pair landing page** | `https://opspocket.com/pair?code=<code>` | Single-use pair code (7-day TTL) | ✅ live |
-| **Backend — account API** | `/api/account/{login, verify, me, portal, logout, pair/<id>}` | Magic-link issuance + session cookie | ✅ live |
-| **Backend — admin API** | `/api/admin/{tenants, waitlist, sessions, pair/<id>}` | Caddy `basic_auth` → trusted at backend | ✅ live |
-| **Backend — pair API** | `/api/pair/<code>` | Single-use code | ✅ live |
+### macOS xattr breaks `flutter build ios`
 
-### How it fits together
+- `~/Downloads/` inherits `com.apple.FinderInfo` / `com.apple.provenance` / `com.apple.macl` extended attributes on macOS 15+
+- Flutter's `xcode_backend.sh` script fails at the "Thin Binary" / "Run Script" phase with opaque error: `Failed to package <project-dir>`
+- **Fix:** `cd <project dir> && xattr -cr .` before every release build (safe to re-run)
 
-- Auth model is **three-layer, minimal, no JWT, no OAuth**:
-  - **Customer** logs in with email only — backend mints a 30-min one-time token, emails it via Resend, customer clicks link, backend exchanges for a 30-day session cookie. Stored in sqlite (`magic_tokens`, `sessions`).
-  - **Admin** is Caddy `basic_auth` at the edge. Backend trusts forwarded requests and has no password check of its own. Single source of truth = the hash in `/etc/caddy/Caddyfile.d/opspocket.caddy`. Credentials saved in `/etc/opspocket/admin-creds.txt` (mode 0600).
-  - **App pairing** is a 12-char URL-safe code with a 7-day TTL, single-use. Auto-generated on every `active` transition; exposed via `opspocket://pair?code=…` deep-link in the welcome email. Customer can mint fresh codes from `/account`, and staff can mint codes from `/admin`.
+### DEVELOPMENT_TEAM not in `project.pbxproj`
 
-- Session state lives in **sqlite** (new tables: `magic_tokens`, `sessions`, `pair_codes`) — service can restart without logging anyone out, no in-process state.
+- Default `ios/Runner.xcodeproj/project.pbxproj` has `CODE_SIGN_STYLE = Automatic` but no `DEVELOPMENT_TEAM`
+- Flutter's codesigning fails silently without it
+- **Fix applied this session** — injected `DEVELOPMENT_TEAM = RT2UR47KNW;` after each `CODE_SIGN_STYLE = Automatic;` line. Commit may or may not include this edit — re-verify with `grep -n "DEVELOPMENT_TEAM" ios/Runner.xcodeproj/project.pbxproj`. If missing, re-apply.
 
-- Backend is the **same stdlib Python HTTP server** as before (`opspocket-backend.service` on `127.0.0.1:8092`). New endpoints added via a dispatch call into `api_extras.py`. Zero new pip dependencies.
+### Dev cert re-trust required after every clean reinstall
 
-- Caddy routes:
-  - `/api/admin/*` → basic-auth'd reverse-proxy
-  - `/admin` + `/admin.html` → basic-auth'd static file
-  - `/api/account/*`, `/api/pair/*`, `/api/stripe-webhook` → unauth'd reverse-proxy (backend handles auth where needed)
-  - `/account`, `/pair`, everything else → static site
+- `xcrun devicectl device install app` onto a clean-slate iPhone (or after `uninstall` + `install`) requires the user to tap
+  **iPhone Settings → General → VPN & Device Management → Apple Development: findgriff@gmail.com → Trust**
+- Then tap the app icon. Normal Apple developer cert UX.
 
-### Customer journey — end to end
+### `flutter run` can't install over wireless on iOS 26
 
-1. Customer buys Starter on `https://opspocket.com/cloud`
-2. Stripe webhook fires → tenant row created with `status=pending`
-3. Orchestrator provisions Hetzner VPS + OpenClaw install (10 min)
-4. Tenant hits `active` → **pair code auto-generated**
-5. Welcome email sent via Resend, includes:
-   - `opspocket://pair?code=…` iPhone deep-link button (purple CTA)
-   - `{{account_url}}` = `https://opspocket.com/account` for magic-link login
-   - Credentials as a fallback
-6. Customer taps the pair button on iPhone → app opens → fetches `/api/pair/<code>` → writes server profile to Keychain → done
-7. Customer can later sign in at `/account` to generate new pair codes, open Stripe billing portal, or view tenant status
+- Both `--debug` and `--release` variants fail at the install step with generic "Error running application"
+- **Workaround:** split build and install: `flutter build ios --release`, then `xcrun devicectl device install app build/ios/iphoneos/Runner.app`. Works 100% of the time this session.
 
-### Admin journey — end to end
+### Test count has fluctuated
 
-1. Open `https://opspocket.com/admin` → Caddy prompts for basic-auth
-2. Admin panel shows 5 stats cards (Total / Active / Provisioning / Failed / Cancelled) + 3 tabs (Tenants / Waitlist / Active sessions)
-3. Each tenant row: one-click "Open UI" (new tab) + "Pair code" (generates fresh single-use code for support cases)
-4. Waitlist tab shows signups from `/var/lib/opspocket/waitlist.txt`
-5. Sessions tab shows active customer logins (useful for support: "is this customer signed in right now?")
+- 97 → 85 → 79 across the day as features were deleted and restored. Current **79/79 passing** ✅ on main.
 
-### Files added / modified
+### CI `installer-ci` GitHub Actions workflow fails
 
-**New on dev box:**
-- `/opt/opspocket/backend/api_extras.py` — 400 lines, all new API logic
-- `/var/www/opspocket.com/{account,admin,pair}.html` — three new pages
-- `/etc/opspocket/admin-creds.txt` — admin basic-auth password (mode 0600)
-- `/var/lib/opspocket/tenants.db` — three new tables: `magic_tokens`, `sessions`, `pair_codes`
+- Pre-existing systemd-in-Docker fidelity issue — OpenClaw user-service doesn't start inside a privileged Ubuntu container.
+- Real `infra/test-installer.sh` against a Hetzner VM passes.
+- Not blocking app development. Fix options documented in `HANDOVER` history: soft-fail gateway check under `CI_ENV=1`, switch to machinectl image, or replace with on-tag Hetzner integration test.
 
-**Modified on dev box:**
-- `/etc/caddy/Caddyfile.d/opspocket.caddy` — basic_auth for `/admin` + `/api/admin/*`, expanded `/api/*` routing
-- `/opt/opspocket/backend/app.py` — dispatches new API paths + generates pair code at `active`
-- `/opt/opspocket/backend/schema.sql` — table defs for the new auth/pair surfaces
-- `/opt/opspocket/backend/email-template.{html,txt}` — pair deep-link button + `/account` CTA
+### Flutter lint info-level items
 
-**Repo side (all committed):**
-- `infra/backend/api_extras.py`
-- `infra/backend/app.py`
-- `infra/backend/schema.sql`
-- `infra/backend/email-template.{html,txt}`
-- `infra/caddy-sites/opspocket.caddy`
-- `site-v2/{account,admin,pair}.html`
+- 66 `info`-level lints (trailing commas, `use_build_context_synchronously`, one `unawaited_futures`). Zero errors, zero warnings. Cosmetic only.
 
-### What was NOT built and why
+### Welcome email deliverability unverified at scale
 
-- **Shared-host Docker pivot** — deliberately deferred per the 2026-04-23 conversation. Per-VPS-per-customer model is the current, validated, shipping architecture. Shared-host is a margin optimisation to revisit once we have ≥ 5 paying customers. No code changes to `install-openclaw.sh` or `provision-tenant.sh` in this pass.
-
-### Validated end-to-end on 2026-04-23
-
-```
-✅ POST /api/account/login  → email sent
-✅ magic token row created in magic_tokens table
-✅ GET  /api/account/verify?token=X → Set-Cookie sent, session row created
-✅ GET  /api/account/me (cookie) → returns real tenants
-✅ GET  /admin → 401 without auth, 200 with 'craig' creds
-✅ GET  /api/admin/tenants → returns full tenant registry
-✅ POST /api/admin/pair/<id> → fresh pair code minted
-✅ GET  /api/pair/<code> → returns full credential payload
-✅ GET  /api/pair/<code> second time → 404 (single-use confirmed)
-✅ GET  https://opspocket.com/account → 200 (loads dashboard)
-✅ GET  https://opspocket.com/pair → 200 (loads landing)
-```
-
-### Admin panel access — credentials
-
-- URL: `https://opspocket.com/admin`
-- User: `craig`
-- Password: `OMfZQSbUT89Nz5k4xv` (also saved at `/etc/opspocket/admin-creds.txt` on dev box)
-
-To rotate: `ssh dev 'caddy hash-password --plaintext "NEW-PASSWORD"'` → replace the hash in `infra/caddy-sites/opspocket.caddy` → `scp` + `systemctl reload caddy`.
+- Resend domain `mail.opspocket.com` verified, one test send successfully delivered (`last_event: delivered`) on 2026-04-22 per prior log.
+- Spam reputation still building; keep an eye on customer inbox placement once real purchases land.
 
 ---
 
-## Audit pass — 2026-04-22
+## 6. What has been tested
 
-Full health audit of everything built this session. Results:
+### Unit + widget tests (on `main`)
 
-### Completed & verified healthy
+- **79 tests pass** as of commit `40ace12` (ran `flutter test` this session). Covers:
+  - Command template builtins (`builtin_templates_test.dart`)
+  - ClawGateState transitions (`claw_gate_state_test.dart`)
+  - MC bridge URL provider edge cases (`mc_bridge_url_provider_test.dart`, 10 tests)
+  - MC bridge client JSON-RPC (`mc_bridge_client_test.dart`)
+  - Danger-command detector (`danger_detector_test.dart`)
+  - Mission Control tabs widget (if still present; verify `test/` contents)
+  - Placeholder utils, sanitizer, secure storage fake, repositories, deploy notifier
 
-- Dev box (`opspocket-dev`, 178.104.242.211): uptime 17h, 18% disk, 12 GB free RAM, load 0.01.
-- Caddy active + serving all 8 site configs. All production domains return 2xx/3xx as expected (HTTP audit matrix below).
-- `opspocket-backend.service` (Stripe webhook + orchestrator) active on 127.0.0.1:8092. DB initialised at `/var/lib/opspocket/tenants.db`. Running in `ORCHESTRATOR_DRY_RUN=1` — safe default until Stripe live-mode keys land.
-- `opspocket-waitlist.service` active on 127.0.0.1:8091, 2 test signups recorded.
-- `opspocket-snapshot.timer` active; next run 2026-04-23 04:00 UTC. 1 snapshot on record (`379026663`, created 07:47 today).
-- `uptime-kuma` container healthy, accessible at `status.opspocket.com` (401 basic-auth, correct).
-- 5 running Docker containers (forms-api, dafc-forms, forms-db-mariadb, glowpower, vantabiolabs, uptime-kuma) — all `Up` for 7–9h.
-- Tenant DB holds 3 validation records (all destroyed + DNS purged). Schema matches backend code; no drift.
-- Namecheap Private Email DNS records live (MX, SPF, DKIM, DMARC); inbound delivery confirmed end-to-end earlier today.
+### End-to-end (manual, on physical iPhone today)
 
-**HTTP audit matrix (all validated):**
+- Splash renders + routes to server list ✅
+- Profile load + save (with Mission Control section) ✅
+- SSH connect as `apptest` ✅
+- Terminal returns `hostname` ✅
+- Server Health tiles go live ✅
+- ClawGate → OpenClaw UI tunnel → basic-auth dialog → dashboard loads ✅ (user confirmed)
+- Mission Control tile opens DeployScreen ✅
 
-| Host | Result |
+### Not yet tested
+
+- SFTP / Files (deleted)
+- Pairing deep-link (app handler unbuilt)
+- Real production-path workflow: Stripe purchase → Hetzner VPS → welcome email → pair button → app auto-configured (needs both Stripe live-card smoke-test AND app pairing handler to exist)
+
+---
+
+## 7. What still needs building
+
+### High priority
+
+1. **Pairing deep-link handler in app** (~1 day)
+   - Register `opspocket://` URL scheme in `ios/Runner/Info.plist`
+   - Add Universal Link config (`.well-known/apple-app-site-association` on opspocket.com — not yet created)
+   - Build `PairingScreen` that fetches `/api/pair/<code>`, writes server profile + Keychain, navigates to detail
+   - Without this, customers must paste creds manually — defeats the whole pairing flow
+
+2. **Restore SFTP / Files feature** (~0.5 day)
+   - Add `file_picker` to `pubspec.yaml`
+   - Implement `SftpSession` / `openSftp()` or equivalent on `SshClient`
+   - Restore deleted files from git history (see §4 for paths)
+   - Re-wire route + tile
+
+### Medium priority
+
+3. **Mission Control loading/error UX** — WebView loading spinner, auth-failure toast, retry button
+4. **App Store readiness** — privacy manifest, App Tracking Transparency prompts if we add analytics, screenshots
+5. **Universal Link domain verification** (associated with `opspocket://` pairing)
+6. **SSH key import** — currently users paste the key body into a text field; pasting from `~/.ssh/id_ed25519` is fiddly on iPhone. Explore iCloud Keychain sync or a "share sheet" entry.
+
+### Low priority / phase 2
+
+7. Sign-in with Apple for customer accounts (currently magic-link email only)
+8. Push notifications for long-running commands
+9. iPad split-screen / Mac Catalyst target
+10. Android Flutter build
+
+See also: the Cloud/CRM platform has its own backlog — see §15.
+
+---
+
+## 8. Current priorities
+
+In execution order, assuming the goal is **public-ready iPhone app that pairs with a Cloud tenant in one tap**:
+
+1. ⚠️ **Run a real £15.99 Starter purchase** on `opspocket.com/cloud` (not app-blocking but validates Cloud pipeline which the app depends on for pairing)
+2. 🎯 **Build the pairing deep-link handler in the app** (§7.1)
+3. 🎯 **Restore SFTP/Files** (§7.2) — only if we want it in v1
+4. 🧪 **Ship to TestFlight** so a small group of beta users can try it
+5. 🎨 **Mission Control WebView polish** (§7.3)
+
+Everything beyond these is phase-2.
+
+---
+
+## 9. Architecture overview
+
+### App stack (✅ verified from `pubspec.yaml`)
+
+- **Flutter** 3.41.7 (stable)
+- **Dart** 3.11.5
+- **State:** Riverpod 2.6.1 (`StateNotifierProvider.family` for per-server state)
+- **Routing:** go_router 14.8.1
+- **SSH:** dartssh2 — hidden behind `SshClient` / `SshClientImpl` interfaces; **feature code never imports dartssh2 directly**
+- **Database:** Drift 2.x on SQLite — regenerate with `dart run build_runner build --delete-conflicting-outputs` after schema changes
+- **Secrets:** flutter_secure_storage 9.2.4 → iOS Keychain (`first_unlock_this_device`)
+- **Biometric:** local_auth 2.3.0
+- **HTTP:** dio 5.x (for MCP JSON-RPC and future API calls)
+- **WebView:** webview_flutter (with webview_flutter_wkwebview on iOS)
+
+### Feature modules (`lib/features/`)
+
+```
+audit/              — command audit log
+auth_security/      — biometric unlock gate
+command_templates/  — slash palette + 40+ builtins
+logs/               — journald/docker/PM2 tails
+mission_control/    — DeployScreen + deploy_notifier (re-install OpenClaw from app)
+                      (mc_screen + mc_repository + mc_models DELETED 2026-04-23)
+                      mc_bridge_client.dart still there for future in-app MCP tool calls
+quick_actions/      — tile-based one-tap commands
+server_health/      — live CPU/RAM/disk/uptime via /proc + ssh
+server_profiles/    — CRUD + detail screen (current main surface)
+settings/
+splash/             — logo splash
+ssh/                — SshClient domain + dartssh2 impl + connection notifier
+terminal/           — interactive terminal screen
+tunnel/             — ClawGate state + notifier + WebView screens
+```
+
+### Shared code (`lib/shared/`)
+
+```
+database/           — Drift schema + generated code
+models/             — plain value types (ServerProfile, etc.)
+providers/          — cross-feature Riverpod
+storage/            — secure_storage wrapper + SecretKeys class
+```
+
+### Key files a new agent will touch
+
+✅ verified paths:
+
+| File | Purpose |
 |---|---|
-| opspocket.com | 200 |
-| www.opspocket.com | 301 → opspocket.com |
-| opspocket.com/cloud | 200 |
-| opspocket.com/blog/ | **200** (fixed this pass, was 404) |
-| darleyabbeyfc.com | 200 |
-| www.darleyabbeyfc.com | 301 |
-| glowpower.co.uk | 200 |
-| www.glowpower.co.uk | 301 |
-| magichairstyler.com | 200 |
-| www.magichairstyler.com | 301 |
-| vantabiolabs.xyz | 200 |
-| www.vantabiolabs.xyz | 301 |
-| hello.dev.opspocket.com | 200 |
-| status.opspocket.com | 401 (basic-auth, expected) |
-| forms.darleyabbeyfc.com | 404 root (expected — POST-only form endpoint) |
-| forms.aressentinel.com | 404 root (expected — POST-only form endpoint) |
-
-### Fixed during this audit
-
-1. **Blog index 404** — `/blog/` directly returned 404 because no `index.html` existed. Created `site-v2/blog/index.html` listing the four existing posts with OpsPocket dark theme, deployed to `/var/www/opspocket.com/blog/index.html` on dev box. Now returns 200.
-2. **Postfix deferred queue** — three emails (2× welcome to findgriff@gmail.com, 1× to findgriff+realtest2@gmail.com) had been stuck in the queue since 09:24–09:51 today with `dsn=4.3.2 deferred transport` (Hetzner blocks port 25 outbound). Flushed all three with `postsuper -d`. Queue now empty. Permanent fix requires configuring a relay (Resend/Mailgun/SMTP2GO) via `infra/scripts/configure-smtp-relay.sh` once API key is obtained.
-
-### Known issues (unfixed, low impact)
-
-- **CI `installer-ci` workflow failing** on last 5 runs. Root cause: `openclaw-gateway` `systemd --user` service does not start inside a `--privileged` Docker container on GitHub Actions (no login session for the openclaw user). The real `infra/test-installer.sh` against a Hetzner VM passes; this is a CI-environment fidelity issue, not a real installer bug. Real tenant `177d1918` reached `active` state in 10 min earlier today. Plan: either use `machinectl`-based Ubuntu image in CI, or gate the gateway check behind a `CI_ENV=1` soft-fail, or replace smoke-test with a Hetzner-integration test on a tag push.
-- **Flutter `analyze` reports 66 issues** — all `info` level (trailing commas, `use_build_context_synchronously`, one `unawaited_futures`). No errors, no warnings. Style-only; safe to ignore or clean up in a dedicated pass.
-- **`www.magichairstyler.com` → root redirect** — `infra/caddy-sites/magichairstyler.caddy` has the standard `redir https://magichairstyler.com{uri} permanent` block, identical to the pattern used for `opspocket.com` and `glowpower.co.uk`. Users have reported the redirect not firing on some paths. Suspect a Cloudflare edge cache of an earlier failing response; purge `www.magichairstyler.com/*` at the CF edge and re-test. If that doesn't fix it, compare headers against `www.glowpower.co.uk` which uses the same pattern successfully.
+| `lib/main.dart` | `runApp(ProviderScope(child: OpsPocketApp()))` |
+| `lib/app/router/app_router.dart` | All routes — splash, servers, terminal, quick-actions, logs, health |
+| `lib/app/theme/app_theme.dart` | OpsClaw palette (red/black/cyan), JetBrains Mono, all component themes |
+| `lib/features/server_profiles/presentation/server_detail_screen.dart` | The main per-server hub (rebuilt 2026-04-23) |
+| `lib/features/server_profiles/presentation/server_edit_screen.dart` | Add/edit form incl. Mission Control section (Keychain-only, no DB migration) |
+| `lib/features/ssh/domain/ssh_client.dart` | **Canonical SSH interface — add methods here first** |
+| `lib/features/ssh/data/ssh_client_impl.dart` | dartssh2 adapter |
+| `lib/features/tunnel/domain/claw_gate_state.dart` | TunnelTarget + state model |
+| `lib/features/tunnel/presentation/claw_gate_notifier.dart` | Binds local port, forwards via SSH channel |
+| `lib/features/mission_control/data/mc_bridge_client.dart` | MCP JSON-RPC client + URL / auth providers |
+| `lib/shared/storage/secure_storage.dart` | **Keychain key constants (SecretKeys class) — never typo** |
+| `pubspec.yaml` | Dependencies + asset registration |
 
 ---
 
-## Outstanding work
+## 10. Key app flows
 
-### Cloud — must complete to go live
+### 10.1 Cold start → server list
 
-| # | Task | Owner action | Blocker? |
-|---|---|---|---|
-| 1 | **Stripe → live mode** | User must generate `sk_live_*` key in Stripe dashboard + paste into `/etc/opspocket/stripe-api-key` on dev box, update webhook secret, flip `ORCHESTRATOR_DRY_RUN=0` in `/etc/opspocket/backend.env`, `systemctl restart opspocket-backend`. | ⚠️ Needs owner |
-| 2 | **Live Stripe Payment Links** | Recreate each Payment Link in live mode (6 total — 3 tiers × month/year) and swap URLs in `site-v2/cloud.html` `STRIPE_LINKS`. | ⚠️ Needs owner |
-| 3 | **SMTP relay for outbound mail** | Sign up to Resend / Mailgun / SMTP2GO / Postmark; run `infra/scripts/configure-smtp-relay.sh` on dev box with the provided API key; add SPF/DKIM/DMARC on `mail.opspocket.com` via CF API (script self-generates the records to publish). | ⚠️ Needs owner (Resend signup) |
-| 4 | **End-to-end live test** | After (1)+(2)+(3) are in place: buy Starter annual on the public site with a real card, verify VPS provisions + welcome email delivers + Stripe Portal cancel works. Expected duration: 10–12 min. | Blocked on 1–3 |
-| 5 | **Destroy DigitalOcean droplet** `188.166.150.21` | Already shut down (port 80 unreachable, SSH fingerprint rotated — means either powered-off or DO recycled the instance). Confirm in DO console + click Destroy. | ⚠️ Needs owner |
+`main.dart` → `OpsPocketApp` → router initial route `/splash` (LogoSplashScreen, 4-sec hold) → `/` (SplashUnlockScreen, biometric) → `/servers` (ServerListScreen).
 
-### Cloud — deferred until above lands
+### 10.2 Add server profile
 
-- **Customer account dashboard (`/account`)** and **SaaS admin panel** — both blocked on Stripe being live + a tenants query API. Design captured in `docs/superpowers/specs/2026-04-22-blocked-saas-ui.md`. ~1 week of work once unblocked.
-  - **UPDATE 2026-04-23**: BOTH SHIPPED. See the new section "SaaS CRM — shipped 2026-04-23" below.
+`/servers/add` → `ServerEditScreen` with fields: nickname, host/IP, port, username, auth method (private key / password), tags, notes, provider dropdown. Expandable **Mission Control (OpenClaw)** section has two Keychain-only fields: host override + clawmine password. On save, private key + ssh password + clawmine host + clawmine password write to Keychain under `SecretKeys.*(<serverId>)`.
 
-### App
+### 10.3 SSH connect
 
-- **Mission Control — architectural pivot, 2026-04-23.** The native Flutter reskin of OpenClaw's dashboard (`mc_screen.dart` + Tasks/Agents/Projects/Schedule/Memory tabs fed by SSH + `su - clawd` sqlite reads) is **deleted**. OpenClaw 2026.4.5 ships its own full-featured Control UI; re-implementing it in Flutter duplicated effort and broke every time OpenClaw changed a file layout. Mission Control is now what it always should have been: a **tunneled WebView of the server-side OpenClaw UI**. One mechanism (ClawGate SSH tunnel), two labelled destinations ("OpenClaw UI" and "Mission Control") both pointing at `127.0.0.1:18789/` on the tenant box. For 2026.4.5 boxes with `gateway.auth.mode="none"` (Caddy-fronted basic-auth), the WebView surfaces the auth dialog and the user types their clawmine password. For legacy token-auth boxes, the token is embedded in the URL fragment as before. Files deleted: `mc_screen.dart` (1327 L), `deploy_screen.dart` (460 L), `deploy_notifier.dart` (150 L), `mc_repository.dart` (150 L), `mc_models.dart` (200 L), `deploy_state.dart` (52 L), plus three test files (`mc_models_test`, `mission_control_tabs_test`, `deploy_notifier_test`). ~2,300 lines removed. `mc_bridge_client.dart` kept — still useful for any future app-level MCP tool calls. 85/85 tests pass. App rebuilt + installed on iPhone 14 Pro Max (iOS 26.4.1) via `devicectl`.
-- **ClawGate** — SSH-tunnel UI to the OpenClaw browser UI. Spec at `docs/superpowers/specs/2026-04-17-clawgate-design.md`; not implemented. Status unchanged from 2026-04-17.
+`/servers/:id` → `_ConnectionBanner` + Connect button → `sshConnectionProvider(serverId).notifier.connect()` → reads Keychain → `SshClient.connect(...)` → banner turns cyan. Session state in `SessionState` model.
 
-### Known iOS 26 wireless gotcha
+### 10.4 Terminal
 
-`flutter run --debug` over WiFi on iOS 26 hangs on a black screen — the built-in Dart VM service handshake is unreliable on wireless for debug builds. Two reliable paths:
-1. **Release builds** always work (no VM-service dependency).
-2. **Install via `xcrun devicectl device install app <path-to-Runner.app>`** — Apple's native installer bypasses Flutter's iOS install code entirely. Pair with `xcrun devicectl device process launch --device <udid> co.opspocket.opspocket` to launch remotely.
+`/servers/:id/terminal` → `TerminalScreen` → `CommandRunner` → `SshClient.exec(...)`. Slash key (`/`) → `SlashPalette` with all `builtin_templates.dart` plus user-saved templates from Drift.
 
-For day-to-day dev with hot-reload, plug the iPhone in with a cable.
+### 10.5 ClawGate tunnel
 
----
+Tile `_ClawGateTile` → `clawGateProvider(serverId).notifier.start(TunnelTarget.clawbot | missionControl)` →
+1. Try to SSH-exec `_tokenCommand` (optional; 2026.4.5 doesn't use it)
+2. `ServerSocket.bind(loopback, 0)` — local random port
+3. Each inbound socket → `SshClient.forwardChannel('127.0.0.1', 18789)` — pipe both ways
+4. Set `tunnelUrl = 'http://127.0.0.1:<port>/'` (or `/#token=<tok>` when token present)
+5. User taps Open → `OpenClawUiScreen` or `MissionControlScreen` (WebView) loads URL
+6. Caddy-fronted boxes prompt for basic-auth inside the WebView — customer types clawmine password
 
-## Credentials & secrets on the dev box
+### 10.6 Mission Control (NEW architecture)
 
-Everything secret lives on `opspocket-dev` and nowhere in the repo. Locations:
+No longer a native tab stack. It's just ClawGate with `activeTarget = TunnelTarget.missionControl`. Lands at the same `127.0.0.1:18789/` as OpenClaw UI — same page, same auth. On legacy boxes with nginx-served `/mission-control`, both targets would work the same way (that path is gone in 2026.4.5).
 
-| Secret | Path on dev box | Notes |
-|---|---|---|
-| Hetzner API token | `/root/.hetzner-token` (mode 0600) | Used by `provision-tenant.sh` and `test-installer.sh` |
-| Cloudflare API token (Caddy DNS-01) | `/etc/caddy/cloudflare.env` | `systemctl restart caddy` after changing — reload does NOT re-read `EnvironmentFile` |
-| Cloudflare API token (provisioner, DNS writes) | `/root/.cloudflare-token` (mode 0600) | Used by `provision-tenant.sh` to create tenant A records |
-| forms-db MariaDB root password | `/root/forms-db-root.txt` (mode 0600) | Used by forms-api container; rotate with `ALTER USER` inside the container |
-| Tenant registry | `/root/tenants.json` + `infra/tenants.json` locally | Written by `provision-tenant.sh` on every successful run |
-| Per-tenant credentials | `/root/CREDENTIALS.json` on each tenant VPS | Written by `install-openclaw.sh`; authoritative copy lives on the tenant box |
-| Migration artifacts (rollback bundle) | `/root/migration-artifacts/` | ~2 GB; delete after 7 days of stable dev-box operation |
+### 10.7 Deploy / Update Mission Control
+
+Purple "Mission Control" card with "Update" button on server detail → `DeployScreen` → 7-step SSH-driven pipeline (check VPS, clone repo, npm install, build, PM2, nginx, verify). `deploy_notifier.dart` runs `su - clawd -c '<cmd>'` via SSH. Only useful for legacy / BYO-VPS customers; 2026.4.5 Cloud tenants have MC pre-installed by `install-openclaw.sh`.
 
 ---
 
-## Access
+## 11. Environments in use
 
-- **SSH:** `ssh dev` from the Mac (key-based; alias in `~/.ssh/config`)
-- **Dev box IP:** `178.104.242.211` (Hetzner CX43, Nuremberg)
-- **Main URLs:**
-  - `https://opspocket.com` — public marketing site
-  - `https://opspocket.com/cloud` — Cloud pricing + waitlist
-  - `https://hello.dev.opspocket.com` — dev-box health check
-  - `https://*.dev.opspocket.com` — test-tenant catch-all
+### Local development (Mac)
+
+- **Host machine:** macOS 26.3.1 (verified this session via `sw_vers` / Xcode output)
+- **Project path:** `/Users/findgriff/Downloads/opspocket-main` ✅ verified
+- **Tooling verified:** Flutter 3.41.7, Dart 3.11.5, Xcode 26.2 (build 17C52)
+- **Flutter channel:** stable
+- **Brew-installed tooling likely present:** git, gh (GitHub CLI), rsync, sshpass — verify with `which` before relying on them
+- **Project dir has macOS xattrs** — always `xattr -cr .` before release builds
+
+### Physical iPhone (test device)
+
+- **Craig's iPhone 14 Pro Max**, iOS 26.4.1 ✅
+- **UDID:** `00008120-001A41693682201E` (Flutter device-id) ✅
+- **Core Device UUID:** `3F2D242C-9CAB-5374-998F-E6BD5D2DF79A` (devicectl device-id) ✅
+- **Paired wirelessly** — Xcode shows it under device dropdown; `xcrun devicectl list devices` confirms
+- **Developer mode:** on ✅ (install works)
+- **Dev cert trusted:** needs re-trust after each clean reinstall (see §5)
+
+### Apple Developer
+
+- **Team ID:** `RT2UR47KNW` ✅ verified via Xcode logs
+- **Account email:** `findgriff@gmail.com` 🟡 (inferred from Xcode + elsewhere; likely correct)
+- **Signing:** Automatic (`CODE_SIGN_STYLE = Automatic`)
+- **TestFlight:** ❓ never set up as far as I know this session — verify in App Store Connect
+
+### Dev box (cloud)
+
+- **Hostname:** `opspocket-dev` ✅
+- **Location:** Hetzner CX43, Nuremberg `nbg1` 🟡 per HANDOVER history
+- **Public IP:** `178.104.242.211` ✅ verified via SSH this session
+- **OS:** Ubuntu 24.04 🟡 per HANDOVER history
+- **SSH shortcut:** `ssh dev` (configured in `~/.ssh/config` on Craig's Mac) ✅ used all session
+- **Purpose:** Serves `opspocket.com` + runs the Cloud platform (Caddy, Python backend, email, orchestrator). Also doubles as a tenant-testbed for the app.
+
+### Dev box's OpenClaw (app's test target)
+
+- **URL:** `https://claw.dev.opspocket.com/` ✅ (TLS via Caddy DNS-01)
+- **Username:** `clawmine` ✅
+- **Password:** stored on dev box at `/root/CREDENTIALS.json` — do **not** include in git
+- **MCP endpoint:** `https://claw.dev.opspocket.com/mcp`
+- **Gateway token mode:** `gateway.auth.mode = "none"` in 2026.4.5; Caddy basic_auth is the gate
+- **OpenClaw version:** 2026.4.5 ✅
 
 ---
 
-## Running the App
+## 12. Deployment / build workflow
+
+### Local dev cycle
 
 ```bash
-# Install deps + regenerate code
+cd /Users/findgriff/Downloads/opspocket-main
+
+# Fresh checkout / after pulling
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 
-# Run on simulator
+# Run on simulator (iPhone 17 etc.)
 flutter run -d "iPhone 16"
 
-# Clear icon cache after icon changes
-xcrun simctl uninstall booted co.opspocket.opspocket
-flutter run
+# Run on physical device (wireless) — DEBUG often hangs black on iOS 26.
+# Cable works fine. Or use the release install below.
 ```
+
+### Release-install to physical iPhone (known-working)
+
+```bash
+cd /Users/findgriff/Downloads/opspocket-main
+xattr -cr .                                                # clear macOS finder xattrs
+flutter build ios --release                                # ~30 s incremental; 2-3 min cold
+DEV=3F2D242C-9CAB-5374-998F-E6BD5D2DF79A
+xcrun devicectl device install app --device $DEV build/ios/iphoneos/Runner.app
+sleep 3
+xcrun devicectl device process launch --device $DEV co.opspocket.opspocket
+```
+
+Then on the iPhone, trust the dev cert once (Settings → General → VPN & Device Management).
+
+### Tests
+
+```bash
+flutter analyze                                            # must be 0 errors, 0 warnings
+flutter test                                               # 79/79 passing as of commit 40ace12
+```
+
+### Commit + push
+
+```bash
+git add <files>
+git commit -m "..."                                        # see existing commit style
+git push origin main
+```
+
+---
+
+## 13. Dev setup requirements
+
+For a new agent to become productive, they need:
+
+1. macOS Sonoma+ (15+) with Xcode 26.x installed
+2. Flutter 3.41.7 via brew or manual install
+3. Apple Developer account added to Xcode with Team ID `RT2UR47KNW`
+4. Craig's iPhone paired with Mac (wireless pairing works)
+5. SSH access to the dev box — `ssh dev` should just work on Craig's Mac; a new agent running on a different Mac needs the private key added to `~/.ssh/config` pointing at `178.104.242.211`
+6. GitHub CLI (`gh`) authenticated as `findgriff`
+7. Clone: `git clone git@github.com:findgriff/opspocket.git`
+
+---
+
+## 14. Key decisions + assumptions
+
+Decisions made that a new agent should **respect unless there is a strong reason**:
+
+- **No pip deps on the Cloud backend** — Python stdlib only. `infra/backend/app.py`, `api_extras.py`, `sync_stripe.py`, `sync_hetzner.py` all use only `urllib`, `sqlite3`, `hmac`, `http.server`. This was deliberate — zero-install systemd service.
+- **Per-VPS-per-customer** Cloud architecture stays until 5+ paying customers. Shared-host Docker pivot is a future optimization, not a blocker.
+- **iOS app is shelved for public release** — keep in repo, don't delete; will re-enable once Cloud has paying customers.
+- **SSH must go through `SshClient` interface** — never import `dartssh2` from feature code.
+- **Builtin template IDs are stable** — never change an existing `builtin.*` ID; it would duplicate entries in users' local DBs.
+- **Keychain access level is `first_unlock_this_device`** — don't change without auditing every Keychain caller; breaks background Face ID flows.
+- **OpsClaw palette** — red `#FF3B1F`, cyan `#00E6FF`, near-black `#0A0A0B`. Always use `AppTheme.*` constants, never hardcode.
+- **MC native reskin is gone — do not rebuild it.** Mission Control is a tunneled WebView of OpenClaw's own UI. Re-implementing is explicitly wrong.
+
+---
+
+## 15. Cloud / hosting context (brief — app depends on this for pairing)
+
+This is the *secondary product* but the iPhone app's pairing flow depends on it. A new agent touching the app does NOT need to understand this deeply, but should know:
+
+### What's live at opspocket.com
+
+- `/` — public marketing homepage with scrolling announcement ticker
+- `/cloud` — pricing page with 3 tiers + Stripe Payment Links (LIVE MODE)
+- `/account` — customer dashboard (magic-link auth)
+- `/admin` — internal CRM (Caddy basic_auth)
+- `/pair` — deep-link fallback for pairing
+- `/support`, `/blog`, status page at `status.opspocket.com`
+
+### Backend service
+
+- `opspocket-backend.service` (systemd unit, Python stdlib) on `127.0.0.1:8092`
+- Handles Stripe webhook, customer account API, admin API, pairing API, Hetzner orchestrator
+- Code: `infra/backend/app.py` + `api_extras.py` + `sync_stripe.py` + `sync_hetzner.py`
+- DB: SQLite at `/var/lib/opspocket/tenants.db`
+
+### What an iPhone app agent might need to touch
+
+- `/api/pair/<code>` — returns `{tenant_id, host, mcp_endpoint, username, password, gateway_token, ssh_host, ssh_port, tier}` JSON — this is the payload the pairing handler consumes
+- Web fallback `https://opspocket.com/pair?code=…` is a reference implementation for what the app should display
+
+**If a new agent needs to modify backend code:** Cloud-specific docs are in prior HANDOVER revisions visible via git log. Ask before making backend changes.
+
+---
+
+## 16. SSH / Keychain / auth implementation notes
+
+- **SSH private key**: stored as secret under `SecretKeys.sshPrivateKey(serverId)` → `ssh.key.<id>`. Written on profile save; read at connect time. Body is PEM (starts with `-----BEGIN OPENSSH PRIVATE KEY-----`).
+- **SSH passphrase**: `SecretKeys.sshKeyPassphrase(serverId)` → `ssh.pass.<id>`. Optional.
+- **SSH password**: `SecretKeys.sshPassword(serverId)` → `ssh.pwd.<id>`. Only used when `authMethod == passwordNotStored` — despite the name, the current implementation *does* store it.
+- **OpenClaw host override**: `SecretKeys.clawmineHost(serverId)` → `clawmine.host.<id>`. Optional; if unset, `mcBridgeUrlProvider` falls back to the SSH host.
+- **clawmine basic-auth password**: `SecretKeys.clawminePassword(serverId)` → `clawmine.pwd.<id>`. Equivalent to the legacy top-level `clawmineSecretKey(serverId)` function in `mc_bridge_client.dart`.
+- **Provider API tokens**: `SecretKeys.providerToken(serverId)` → `provider.token.<id>`. For Hetzner/DO etc. if the user wires cloud API access.
+
+All secrets are wiped when a profile is deleted (see `server_edit_screen.dart` `_confirmDelete`).
+
+**Do not** read Keychain in `initState()` of any screen; it's async. Always use the Riverpod secureStorageProvider + await.
+
+---
+
+## 17. Repos / branches / recent commits
+
+### Repo
+
+- **GitHub URL:** `git@github.com:findgriff/opspocket.git` ✅ verified this session
+- **Owner:** `findgriff`
+- **Visibility:** ❓ (not verified — likely private)
+
+### Branches
+
+✅ Only branches seen this session:
+- `main` (local + `origin/main`)
+- `origin/HEAD -> origin/main`
+
+No feature branches active. Work has been landing directly on `main` this week.
+
+### Recent commits (oldest → newest, last 20 on `main` as of 2026-04-23)
+
+| SHA | Subject |
+|---|---|
+| `40ace12` | feat(crm): full SaaS CRM v2 — Stripe+Hetzner sync, tenant drawer, analytics |
+| `e87050e` | fix(site): move announcement ticker to sit directly under the nav |
+| `e3877eb` | fix(site): ticker is now a single flowing announcement, not bullet list |
+| `ae4f231` | feat(site): rewrite homepage ticker — Cloud-now vs App-soon split |
+| `e794a2f` | feat(saas): ship customer dashboard, admin panel, and pairing flow |
+| `f334c92` | restore(server-detail): rebuild the screenshot layout — live health + MC update card |
+| `2bf2934` | refactor(mission-control): delete native reskin, tunnel to server-side UI |
+| `bb215ad` | feat(mission-control): wire OpenClaw gateway credentials into server profile |
+| `6f0dfd3` | feat(email): wire Resend as live SMTP relay — end-to-end verified |
+| `b33bd35` | feat(site): add /support page required by Stripe live activation |
+| `2ca4fbc` | feat(cloud): flip to live Stripe — 3 products, 6 prices, 6 Payment Links |
+| `f38bb23` | chore(audit): Lead DevOps audit pass 2026-04-22 |
+| `d4ad026` | fix(installer+orchestrator): code-server non-fatal + cloud-init marker integrity |
+| `517c2f6` | fix(backend): inject dev-box SSH pubkey into tenant cloud-init |
+| `4838658` | fix(backend): Hetzner label sanitisation + SSH key name + Postfix+DKIM |
+| `d207c4c` | fix(installer): preserve multi-site Caddyfile + actually delete old site/ |
+| `0c26a2f` | test(tunnel): add ClawGateState unit tests |
+| `24d43b0` | feat(mission_control): rewire MCP client for OpenClaw 2026.4.5 gateway |
+| `114ff5b` | test(mission_control): widget test for bottom-tab highlight + body swap |
+| `7fd2061` | fix(mission_control): harden model parsing against non-int numeric fields |
+
+The 3 most important for an app-focused agent: **`f334c92`, `2bf2934`, `bb215ad`** — they rewrite the server-detail layout, delete the native MC screen, and wire the MC Keychain creds respectively.
+
+---
+
+## 18. What to verify first in a new session
+
+Run these **before writing any code** — any failure signals an environment issue to fix first:
+
+```bash
+# 1. Repo clean
+cd /Users/findgriff/Downloads/opspocket-main
+git status                                 # expect: clean or known untracked
+git log -1 --oneline                       # expect: 40ace12 ... (or later)
+
+# 2. Flutter toolchain
+flutter --version                          # expect: 3.41.7, Dart 3.11.5
+xcodebuild -version                        # expect: Xcode 26.x
+
+# 3. Dependencies fresh
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+
+# 4. Tests pass
+flutter analyze                            # expect: 0 errors, 0 warnings (info-level is fine)
+flutter test                               # expect: 79 passing (number may shift)
+
+# 5. Dev box reachable
+ssh dev 'uptime'                           # expect: response, not hang
+
+# 6. Physical device paired
+xcrun devicectl list devices | grep -i iphone   # expect: Craig's iPhone available
+
+# 7. Last-known-good release build still viable
+xattr -cr .
+flutter build ios --release                # expect: ✓ Built build/ios/iphoneos/Runner.app
+```
+
+If any of these fails, fix that before feature work. Do NOT assume prior state.
+
+---
+
+## 19. Do not change without caution
+
+- `lib/shared/storage/secure_storage.dart` SecretKeys class — adding is safe; **renaming breaks existing users' Keychain entries**
+- `lib/features/command_templates/data/builtin_templates.dart` — **never change existing IDs**; add new ones only
+- `lib/features/ssh/domain/ssh_client.dart` — the whole app routes through this interface; a breaking change touches dozens of files
+- `ios/Runner/Info.plist` — bundle ID, required background modes, and any URL schemes must survive merges
+- `pubspec.yaml` version bumps — especially Flutter / Dart / Riverpod / dartssh2 / Drift — do in a separate commit, run full test suite
+- `ios/Runner.xcodeproj/project.pbxproj` DEVELOPMENT_TEAM — if missing, re-add `RT2UR47KNW`; if replaced with a different team, signing breaks
+
+---
+
+## 20. Immediate next actions
+
+If a new agent takes over today, the highest-leverage sequence is:
+
+1. **Verify toolchain + green tests** (§18) — 5 min
+2. **Flip Stripe live test** — run a real £15.99 purchase on `opspocket.com/cloud`, refund after, confirm welcome email arrives with the pair deep-link — 15 min (user action)
+3. **Build app pairing handler** (§7.1) — 1 day
+4. **Ship to TestFlight** — 2 hours (App Store Connect setup + build upload)
+
+Everything else is optional polish.
+
+---
+
+## 21. Credentials + secrets — reference only
+
+**No secret values are stored in this document.** Locations and key names only:
+
+| Secret | Where it lives | Notes |
+|---|---|---|
+| Hetzner API token | dev box `/etc/opspocket/hetzner-token` (mode 0600) — or fallback `/root/.hetzner-token` | used by orchestrator + `test-installer.sh` |
+| Cloudflare API token (Caddy DNS-01) | dev box `/etc/caddy/cloudflare.env` | `systemctl restart caddy` after changing — reload does NOT pick it up |
+| Cloudflare API token (orchestrator DNS writes) | dev box `/etc/opspocket/cloudflare-token` or `/root/.cloudflare-token` | |
+| Stripe live secret key | dev box `/etc/opspocket/stripe-api-key` (mode 0600) | `sk_live_…` |
+| Stripe live webhook signing secret | dev box `/etc/opspocket/stripe-webhook-secret` (mode 0600) | `whsec_…` |
+| Resend sending API key | dev box `/etc/opspocket/resend-api-key` + `/etc/opspocket/email-resend-key` (same content) | `re_…`, sending-only permission |
+| Admin panel basic-auth | bcrypt hash in `infra/caddy-sites/opspocket.caddy` under `@admin_api` + `@admin_page`; plaintext in dev box `/etc/opspocket/admin-creds.txt` | rotate with `caddy hash-password` |
+| Apple Developer account password | Not stored here; findgriff@gmail.com; signing is automatic |
+| App signing identity | Xcode manages locally via Team ID `RT2UR47KNW` |
+| Mac's SSH key for `ssh dev` | `~/.ssh/id_ed25519` on Craig's Mac | Public key is on dev box `~root/.ssh/authorized_keys` |
+| Tenant-per-VPS clawmine passwords | `/root/CREDENTIALS.json` on each tenant box | authoritative copy per-tenant |
+| Tenant registry | dev box `/root/tenants.json` + committed `infra/tenants.json` | written by `provision-tenant.sh` |
+
+**Test/scratch fixtures that may have been left on the dev box this session (not real production secrets):**
+
+- `apptest` SSH user (UID 1001, in `sudo` group) — password set during this session, rotate or remove if stale. Check `id apptest` on dev box. Created specifically so the iPhone app could SSH in for manual testing.
+- `clawd` alias user (UID shared with `openclaw`, i.e. 1000) in `/etc/passwd` + `/etc/shadow` — added so `mc_repository.dart` style `su - clawd -c '...'` commands resolve. Locked hash or simple test password; treat as disposable.
+- pam_wheel trust setting in `/etc/pam.d/su` — allows members of `sudo` group to `su` without target password. Non-default; may want to revert.
+
+---
+
+## 22. Outstanding — exact list to go live (business + app)
+
+### Business (Cloud platform)
+
+- ❓ Run first real £15.99 Starter purchase (owner action, 10 min)
+- ❓ Confirm welcome email arrives with pair deep-link button (will be visible after action above)
+- ❓ Confirm `/account` shows the invoice after first purchase
+- ❓ Destroy the old DigitalOcean droplet `188.166.150.21` (still reachable as of 2026-04-23 per audit logs; should be Destroyed not Powered Off)
+
+### App (iPhone)
+
+- 🎯 Pairing deep-link handler (§7.1, §5, §7)
+- 🎯 SFTP/Files restored (§4) — optional
+- 🎯 TestFlight distribution
+- 🎯 App Store readiness (privacy manifest, screenshots, metadata)
+
+Once the pairing handler ships + TestFlight is live, a customer can go from **Stripe purchase → phone app fully configured** in under 15 minutes, zero manual credential typing. That's the ship-worthy milestone.
+
+---
+
+*End of HANDOVER. For agent-specific operating instructions, read `CLAUDE.md` next.*
