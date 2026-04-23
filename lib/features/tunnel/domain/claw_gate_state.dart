@@ -1,5 +1,11 @@
 enum ClawGateStatus { idle, fetchingToken, starting, active, error }
 
+/// Two tunnel destinations — both are server-side OpenClaw pages. On
+/// OpenClaw 2026.4.5 they point at the same daemon (`127.0.0.1:18789`);
+/// the only difference is which view the WebView lands on. On legacy
+/// boxes (< 2026), `missionControl` mapped to nginx-served
+/// `http://<host>:80/mission-control`. New boxes collapse both to the
+/// same backend.
 enum TunnelTarget { clawbot, missionControl }
 
 extension TunnelTargetX on TunnelTarget {
@@ -8,11 +14,11 @@ extension TunnelTargetX on TunnelTarget {
         TunnelTarget.missionControl => 'Mission Control',
       };
 
-  /// Remote port on the VPS to forward to.
-  int get remotePort => switch (this) {
-        TunnelTarget.clawbot => 18789,
-        TunnelTarget.missionControl => 80, // Nginx serves /mission-control
-      };
+  /// Remote port on the VPS to forward to. Both targets talk to the
+  /// OpenClaw daemon on 18789 — auth is handled by the WebView
+  /// (Caddy-fronted boxes prompt for basic-auth; token-auth boxes
+  /// embed the token in the URL via [ClawGateState.tunnelUrl]).
+  int get remotePort => 18789;
 }
 
 class ClawGateState {
@@ -40,13 +46,13 @@ class ClawGateState {
 
   String? get tunnelUrl {
     if (!isActive || localPort == null) return null;
-    return switch (activeTarget) {
-      TunnelTarget.clawbot when token != null =>
-        'http://127.0.0.1:$localPort/#token=$token',
-      TunnelTarget.missionControl =>
-        'http://127.0.0.1:$localPort/mission-control',
-      _ => null,
-    };
+    // Token-auth boxes embed the token in the URL fragment so the
+    // OpenClaw UI can pick it up client-side. On basic-auth boxes
+    // (2026.4.5 Caddy default — gateway.auth.mode == "none"), the
+    // WebView will surface the 401 auth dialog and the user types
+    // their clawmine password. Either way, same base URL.
+    final base = 'http://127.0.0.1:$localPort/';
+    return token != null ? '$base#token=$token' : base;
   }
 
   ClawGateState copyWith({

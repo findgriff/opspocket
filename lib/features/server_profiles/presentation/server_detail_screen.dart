@@ -9,7 +9,9 @@ import '../../../shared/models/session_state.dart';
 import '../../ssh/presentation/ssh_connection_notifier.dart';
 import '../../tunnel/domain/claw_gate_state.dart';
 import '../../tunnel/presentation/claw_gate_notifier.dart';
-import '../../mission_control/presentation/deploy_screen.dart';
+// Native Mission Control screen was deleted on 2026-04-23. Mission
+// Control is now tunneled via ClawGate → WebView (same mechanism as
+// the OpenClaw UI). See _ClawGateTile below.
 import '../../tunnel/presentation/openclaw_ui_screen.dart';
 import '../../tunnel/presentation/mission_control_screen.dart';
 import '../data/server_profile_repository_impl.dart';
@@ -75,46 +77,10 @@ class ServerDetailScreen extends ConsumerWidget {
               //   label: 'Logs',
               //   subtitle: 'Tail journald, Docker, PM2, files',
               //   onTap: () => context.push('/servers/$serverId/logs'),
-              // ),
-              // const SizedBox(height: 12),
-              // Native MCScreen removed — use Tunnel → Mission button below for
-              // live data from the deployed Next.js app instead.
-              // _ActionTile(
-              //   icon: Icons.crisis_alert,
-              //   label: 'Mission Control',
-              //   subtitle: 'Tasks, agents, projects, memory',
-              //   color: const Color(0xFFFF3B1F),
-              //   onTap: () {
-              //     final name = server.nickname.isNotEmpty ? server.nickname : server.hostnameOrIp;
-              //     Navigator.push(context, MaterialPageRoute(
-              //       builder: (_) => MCScreen(serverId: serverId, serverName: name),
-              //       fullscreenDialog: true,
-              //     ));
-              //   },
-              // ),
-              // const SizedBox(height: 12),
-              _ActionTile(
-                icon: Icons.rocket_launch_outlined,
-                label: 'Deploy Mission Control',
-                subtitle: 'Pull latest & rebuild from GitHub',
-                color: const Color(0xFFB57BFF),
-                onTap: () {
-                  final name = server.nickname.isNotEmpty
-                      ? server.nickname
-                      : server.hostnameOrIp;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DeployScreen(
-                        serverId: serverId,
-                        serverName: name,
-                      ),
-                      fullscreenDialog: true,
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
+              // Mission Control + OpenClaw UI: one tile, two destinations.
+              // Both tunnel to OpenClaw's server-side Control UI — no
+              // duplicate native Flutter reskin. Installed on every
+              // OpenClaw Cloud box by `install-openclaw.sh`.
               _ClawGateTile(serverId: serverId),
               const SizedBox(height: 24),
               Text(

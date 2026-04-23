@@ -7,9 +7,13 @@ import '../../../features/ssh/presentation/ssh_connection_notifier.dart';
 import '../../../shared/models/session_state.dart';
 import '../domain/claw_gate_state.dart';
 
-// Read gateway.auth.token directly from ~/.openclaw/openclaw.json.
-// The `openclaw config get` CLI subcommand does not exist in this version.
-const _tokenCommand = r"""su - clawd -c 'export PATH="$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:$PATH"; python3 -c "import json,os; d=json.load(open(os.path.expanduser(\"~/.openclaw/openclaw.json\"))); print(d[\"gateway\"][\"auth\"][\"token\"])" 2>&1'""";
+// Read gateway.auth.token from ~/.openclaw/openclaw.json if present.
+// On 2026.4.5 the installer defaults gateway.auth.mode = "none" with no
+// token key — Caddy's basic_auth is the only gate. This python prints
+// an empty string (not a KeyError) in that case so the caller treats
+// it as "no token, let the WebView handle basic-auth in the browser
+// chrome".
+const _tokenCommand = r"""su - clawd -c 'export PATH="$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:$PATH"; python3 -c "import json,os; d=json.load(open(os.path.expanduser(\"~/.openclaw/openclaw.json\"))); print((d.get(\"gateway\") or {}).get(\"auth\",{}).get(\"token\") or \"\")" 2>&1'""";
 
 class ClawGateNotifier extends StateNotifier<ClawGateState> {
   final Ref _ref;
@@ -38,23 +42,21 @@ class ClawGateNotifier extends StateNotifier<ClawGateState> {
     final client = _ref.read(sshClientProvider(_serverId));
     String? token;
 
-    // ── Clawbot: fetch token first (auto-generate if missing) ───────────────
-    if (target == TunnelTarget.clawbot) {
-      state = const ClawGateState(status: ClawGateStatus.fetchingToken);
-
+    // ── Try to fetch a gateway token ───────────────────────────────────────
+    // Both targets (OpenClaw UI and Mission Control) prefer token auth
+    // when available — it gives the OpenClaw UI a direct login without
+    // a basic-auth prompt. When the token is missing (2026.4.5 default
+    // mode "none"), we fall back to basic auth handled by the WebView
+    // on the first request. That's not an error; just keep going.
+    state = const ClawGateState(status: ClawGateStatus.fetchingToken);
+    try {
       final result = await client.exec(_tokenCommand,
-          timeout: const Duration(seconds: 15),);
-      token = result.stdout.trim();
-
-      if (token.isEmpty) {
-        state = ClawGateState(
-          status: ClawGateStatus.error,
-          errorMessage: result.stderr.trim().isNotEmpty
-              ? 'Could not read gateway token.\n${result.stderr.trim()}'
-              : 'gateway.auth.token not found in ~/.openclaw/openclaw.json',
-        );
-        return;
-      }
+          timeout: const Duration(seconds: 8),);
+      final fetched = result.stdout.trim();
+      token = fetched.isEmpty ? null : fetched;
+    } catch (_) {
+      // SSH hiccup or exec timeout — not fatal. Proceed tokenless.
+      token = null;
     }
 
     // ── Bind local port ──────────────────────────────────────────────────────
